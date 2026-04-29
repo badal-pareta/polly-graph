@@ -1,0 +1,7 @@
+demo
+src
+node_modules
+.vscode
+.github
+*.log
+coverage

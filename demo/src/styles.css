@@ -1,0 +1,53 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Inter, sans-serif;
+}
+
+body {
+  overflow: hidden;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+button {
+  padding: 8px 14px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f9fafb;
+}
+
+#graph-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+#graph-container {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

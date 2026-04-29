@@ -1,0 +1,75 @@
+{
+  "name": "@polly/polly-graph",
+  "version": "0.1.0",
+  "description": "Reusable D3-based graph visualization SDK with configurable nodes, links, labels, interactions, and layout behaviors.",
+  "license": "MIT",
+  "author": "Badal",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/badal-pareta/polly-graph.git"
+  },
+  "homepage": "https://github.com/badal-pareta/polly-graph#readme",
+  "bugs": {
+    "url": "https://github.com/badal-pareta/polly-graph/issues"
+  },
+  "keywords": [
+    "graph",
+    "visualization",
+    "d3",
+    "network-graph",
+    "typescript",
+    "sdk"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "dev": "tsup src/index.ts --watch --format esm,cjs --dts",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "d3": "7.9.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-force": "^3.0.10",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-transition": "^3.0.9",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/node": "^22.15.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.0",
+    "@typescript-eslint/parser": "^8.31.0",
+    "eslint": "^9.25.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^3.1.1"
+  }
+}
