@@ -1,4 +1,4 @@
-# @polly/polly-graph
+# polly-graph
 
 Reusable D3-based graph visualization SDK with configurable nodes, links, labels, interactions, and layout behaviors.
 
@@ -18,7 +18,7 @@ Reusable D3-based graph visualization SDK with configurable nodes, links, labels
 ## Installation
 
 ```bash
-npm install @polly/polly-graph
+npm install polly-graph
 ```
 
 No separate D3 installation is required.
@@ -42,7 +42,7 @@ import {
   createGraph,
   GraphNode,
   GraphLink,
-} from '@polly/polly-graph';
+} from 'polly-graph';
 
 const container = document.getElementById(
   'graph-container',

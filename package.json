@@ -1,5 +1,5 @@
 {
-  "name": "@polly/polly-graph",
+  "name": "polly-graph",
   "version": "0.1.0",
   "description": "Reusable D3-based graph visualization SDK with configurable nodes, links, labels, interactions, and layout behaviors.",
   "license": "MIT",
