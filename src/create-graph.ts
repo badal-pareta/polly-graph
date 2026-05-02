@@ -5,6 +5,7 @@ import { Simulation, forceX, forceY } from 'd3-force';
 import { createGraphLayers } from './core/create-graph-layers';
 import { createZoom } from './core/create-zoom';
 import { createGraphSimulation } from './core/create-graph-simulation';
+import { createGraphControls, GraphControlsInstance } from './controls/create-graph-controls';
 import { getShortenedTargetPoint, RenderableGraphLink, renderLinks } from './renderer/links';
 import { renderNodes } from './renderer/nodes';
 import { renderNodeLabels } from './renderer/node-labels';
@@ -24,6 +25,7 @@ export function createGraph(config: GraphConfig): GraphInstance {
   let cleanupResize: VoidFunction | null = null;
   let cleanupZoom: VoidFunction | null = null;
   let tooltipBinding: NodeTooltipBinding | null = null;
+  let controls: GraphControlsInstance | null = null;
 
   let dimensions: GraphDimensions = { width: 0, height: 0 };
   let rootGroup: SVGGElement | null = null;
@@ -164,120 +166,125 @@ export function createGraph(config: GraphConfig): GraphInstance {
       //     .nodeStyle
       // );
     }
+
+    if (config.controls?.enabled) {
+      controls = createGraphControls(config.container, { zoomIn, zoomOut, resetView, fitView, destroy, render }, config.controls);
+      controls.mount();
+    }
   }
 
-function resetView(): void {
-  /**
-   * zoomBehavior is attached to SVG,
-   * not interactionGroup (<g>)
-   */
-  if (!zoomBehavior) {
-    return;
+  function resetView(): void {
+    /**
+     * zoomBehavior is attached to SVG,
+     * not interactionGroup (<g>)
+     */
+    if (!zoomBehavior) {
+      return;
+    }
+
+    select(config.container)
+      .transition()
+      .call(
+        zoomBehavior.transform,
+        zoomIdentity,
+      );
   }
 
-  select(config.container)
-    .transition()
-    .call(
-      zoomBehavior.transform,
-      zoomIdentity,
-    );
-}
+  function fitView(): void {
+    /**
+     * rootGroup:
+     * used for bbox measurement
+     *
+     * config.container:
+     * used as zoom host
+     */
+    if (
+      !zoomBehavior ||
+      !rootGroup ||
+      dimensions.width === 0 ||
+      dimensions.height === 0
+    ) {
+      return;
+    }
 
-function fitView(): void {
-  /**
-   * rootGroup:
-   * used for bbox measurement
-   *
-   * config.container:
-   * used as zoom host
-   */
-  if (
-    !zoomBehavior ||
-    !rootGroup ||
-    dimensions.width === 0 ||
-    dimensions.height === 0
-  ) {
-    return;
+    const bounds: DOMRect =
+      rootGroup.getBBox();
+
+    if (
+      bounds.width === 0 ||
+      bounds.height === 0
+    ) {
+      return;
+    }
+
+    const width: number =
+      dimensions.width;
+
+    const height: number =
+      dimensions.height;
+
+    const scale: number =
+      Math.min(
+        width / bounds.width,
+        height / bounds.height,
+      ) * 0.9;
+
+    const translateX: number =
+      (width - bounds.width * scale) / 2 -
+      bounds.x * scale;
+
+    const translateY: number =
+      (height - bounds.height * scale) / 2 -
+      bounds.y * scale;
+
+    const transform = zoomIdentity
+      .translate(
+        translateX,
+        translateY,
+      )
+      .scale(scale);
+
+    select(config.container)
+      .transition()
+      .call(
+        zoomBehavior.transform,
+        transform,
+      );
   }
 
-  const bounds: DOMRect =
-    rootGroup.getBBox();
+  function zoomIn(): void {
+    /**
+     * Must operate on SVG host,
+     * never interactionGroup (<g>)
+     */
+    if (!zoomBehavior) {
+      return;
+    }
 
-  if (
-    bounds.width === 0 ||
-    bounds.height === 0
-  ) {
-    return;
+    select(config.container)
+      .transition()
+      .call(
+        zoomBehavior.scaleBy,
+        1.2,
+      );
   }
 
-  const width: number =
-    dimensions.width;
+  function zoomOut(): void {
+    /**
+     * Must operate on SVG host,
+     * never interactionGroup (<g>)
+     */
+    if (!zoomBehavior) {
+      return;
+    }
 
-  const height: number =
-    dimensions.height;
-
-  const scale: number =
-    Math.min(
-      width / bounds.width,
-      height / bounds.height,
-    ) * 0.9;
-
-  const translateX: number =
-    (width - bounds.width * scale) / 2 -
-    bounds.x * scale;
-
-  const translateY: number =
-    (height - bounds.height * scale) / 2 -
-    bounds.y * scale;
-
-  const transform = zoomIdentity
-    .translate(
-      translateX,
-      translateY,
-    )
-    .scale(scale);
-
-  select(config.container)
-    .transition()
-    .call(
-      zoomBehavior.transform,
-      transform,
-    );
-}
-
-function zoomIn(): void {
-  /**
-   * Must operate on SVG host,
-   * never interactionGroup (<g>)
-   */
-  if (!zoomBehavior) {
-    return;
+    select(config.container)
+      .transition()
+      .call(
+        zoomBehavior.scaleBy,
+        0.8,
+      );
   }
-
-  select(config.container)
-    .transition()
-    .call(
-      zoomBehavior.scaleBy,
-      1.2,
-    );
-}
-
-function zoomOut(): void {
-  /**
-   * Must operate on SVG host,
-   * never interactionGroup (<g>)
-   */
-  if (!zoomBehavior) {
-    return;
-  }
-
-  select(config.container)
-    .transition()
-    .call(
-      zoomBehavior.scaleBy,
-      0.8,
-    );
-}
 
   function destroy(): void {
     if (cleanupResize) {
@@ -298,6 +305,11 @@ function zoomOut(): void {
     if (simulation) {
       simulation.stop();
       simulation = null;
+    }
+
+    if (controls) {
+      controls.destroy();
+      controls = null;
     }
 
     rootGroup = null;

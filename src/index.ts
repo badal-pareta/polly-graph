@@ -1,4 +1,5 @@
 import './styles/graph-tooltip.css';
+import './styles/graph-controls.css';
 
 export { createGraph } from './create-graph';
 export type { GraphConfig, GraphInteractionConfig } from './contracts/graph-config.interface';

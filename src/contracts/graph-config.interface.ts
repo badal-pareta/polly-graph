@@ -1,3 +1,4 @@
+import { GraphControlsConfig } from './graph-controls.interface';
 import { GraphNode, GraphLink, NodeStyle, LinkStyle } from './graph.types';
 
 export type GraphTooltipTheme = 'dark' | 'light';
@@ -39,4 +40,10 @@ export interface GraphConfig {
   readonly nodes: GraphNode[];
   readonly links: GraphLink[];
   readonly interaction?: GraphInteractionConfig;
+  readonly controls?: GraphControlsConfig;
+}
+
+export interface ControlsController {
+  mount(): void;
+  destroy(): void;
 }

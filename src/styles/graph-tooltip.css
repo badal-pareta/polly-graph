@@ -2,58 +2,38 @@
   position: absolute;
   pointer-events: none;
   z-index: 1000;
-
   min-width: 160px;
   max-width: 280px;
-
   border-radius: 10px;
-
   background: #0f172a;
   color: #f8fafc;
-
-  border: 1px solid
-    rgba(255, 255, 255, 0.08);
-
-  box-shadow:
-    0 12px 32px
-    rgba(0, 0, 0, 0.22);
-
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   line-height: 1.5;
-
   opacity: 0;
-  transform:
-    translateY(4px);
-
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .graph-tooltip--visible {
   opacity: 1;
-  transform:
-    translateY(0);
+  transform: translateY(0);
 }
 
 .graph-tooltip__content {
   position: relative;
   z-index: 2;
-
   padding: 10px 14px;
 }
 
 .graph-tooltip__arrow {
   position: absolute;
-
   width: 12px;
   height: 12px;
-
   background: #0f172a;
-
-  transform:
-    rotate(45deg);
-
+  transform: rotate(45deg);
   z-index: 1;
 }
 
@@ -63,16 +43,9 @@
 .graph-tooltip__arrow--top {
   left: 50%;
   bottom: -6px;
-
-  transform:
-    translateX(-50%)
-    rotate(45deg);
-
-  border-right: 1px solid
-    rgba(255, 255, 255, 0.08);
-
-  border-bottom: 1px solid
-    rgba(255, 255, 255, 0.08);
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* bottom placement
@@ -81,16 +54,9 @@
 .graph-tooltip__arrow--bottom {
   left: 50%;
   top: -6px;
-
-  transform:
-    translateX(-50%)
-    rotate(45deg);
-
-  border-left: 1px solid
-    rgba(255, 255, 255, 0.08);
-
-  border-top: 1px solid
-    rgba(255, 255, 255, 0.08);
+  transform: translateX(-50%) rotate(45deg);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* left placement
@@ -100,15 +66,9 @@
   top: 50%;
   right: -6px;
 
-  transform:
-    translateY(-50%)
-    rotate(45deg);
-
-  border-top: 1px solid
-    rgba(255, 255, 255, 0.08);
-
-  border-right: 1px solid
-    rgba(255, 255, 255, 0.08);
+  transform: translateY(-50%) rotate(45deg);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* right placement
@@ -117,33 +77,23 @@
 .graph-tooltip__arrow--right {
   top: 50%;
   left: -6px;
-
-  transform:
-    translateY(-50%)
-    rotate(45deg);
-
-  border-left: 1px solid
-    rgba(255, 255, 255, 0.08);
-
-  border-bottom: 1px solid
-    rgba(255, 255, 255, 0.08);
+  transform: translateY(-50%) rotate(45deg);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .graph-tooltip__type {
   font-size: 11px;
   font-weight: 600;
-
   color: #94a3b8;
-
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .graph-tooltip__label {
   margin-top: 4px;
-
   font-size: 14px;
   font-weight: 600;
-
+  line-height: 1.4;
   color: #ffffff;
 }

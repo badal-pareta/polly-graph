@@ -48,6 +48,12 @@ const graph = createGraph({
   nodes: demoNodes,
   links: demoLinks,
   interaction: demoInteractionConfig,
+  controls: {
+    enabled: true,
+    position: 'bottom-left',
+    orientation: 'vertical',
+    offset: { x: 10, y: 10 },
+  },
 });
 
 graph.render();

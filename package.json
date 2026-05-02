@@ -47,8 +47,8 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-    "dev": "tsup src/index.ts --watch --format esm,cjs --dts",
+    "build": "tsup",
+    "dev": "tsup",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
