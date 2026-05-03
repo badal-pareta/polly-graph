@@ -1,37 +1,45 @@
 import { GraphLayers } from '../contracts/graph-layers.interface';
 
-export function createGraphLayers(svg: SVGSVGElement): GraphLayers {
-  while (svg.firstChild) {
-    svg.removeChild(svg.firstChild);
-  }
+export function createGraphLayers(host: HTMLElement): GraphLayers {
+  host.innerHTML = '';
 
-  const createGroup = (className: string): SVGGElement => {
-    const group: SVGGElement = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    group.setAttribute('class', className);
-    group.setAttribute('data-layer', className);
+  const rootContainer = document.createElement('div');
+  rootContainer.className = 'pg-root';
+  
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'pg-canvas');
 
+  const overlay = document.createElement('div');
+  overlay.className = 'pg-overlay';
+
+  rootContainer.appendChild(svg);
+  rootContainer.appendChild(overlay);
+  host.appendChild(rootContainer);
+
+  const createGroup = (layerName: string): SVGGElement => {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    // We use pg-layer-[name] for CSS, but [data-layer] exactly as your renderers expect
+    group.setAttribute('class', `pg-layer-${layerName}`);
+    group.setAttribute('data-layer', layerName);
     return group;
   };
 
-  const interactionLayer: SVGGElement = createGroup('interaction-layer');
-  const interactionRect: SVGRectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  const interactionAttributes: Record<string, string> = {
-    class: 'interaction-surface',
-    width: '100%',
-    height: '100%',
-    fill: 'transparent',
-    'pointer-events': 'all'
-  };
-
-  Object.entries(interactionAttributes).forEach(([key, value]): void => {
-    interactionRect.setAttribute(key, value);
-  });
+  const interactionLayer = createGroup('interaction-layer');
+  const interactionRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  interactionRect.setAttribute('class', 'pg-interaction-surface');
+  interactionRect.setAttribute('fill', 'transparent');
+  interactionRect.setAttribute('pointer-events', 'all');
   interactionLayer.appendChild(interactionRect);
-  const root: SVGGElement = createGroup('knowledge-graph-root');
+
+  const graphRoot = createGroup('viewport');
+  
   const layers: GraphLayers = {
+    svg,
+    overlay,
     interactionLayer,
     interactionRect,
-    root,
+    root: graphRoot,
+    // These keys now match your ctx.root.select('[data-layer="..."]') calls
     links: createGroup('links'),
     linkLabels: createGroup('link-labels'),
     nodeRings: createGroup('node-rings'),
@@ -39,7 +47,7 @@ export function createGraphLayers(svg: SVGSVGElement): GraphLayers {
     nodeLabels: createGroup('node-labels'),
   };
 
-  root.append(
+  graphRoot.append(
     layers.links,
     layers.linkLabels,
     layers.nodeRings,
@@ -48,7 +56,7 @@ export function createGraphLayers(svg: SVGSVGElement): GraphLayers {
   );
 
   svg.appendChild(interactionLayer);
-  svg.appendChild(root);
+  svg.appendChild(graphRoot);
 
   return layers;
 }

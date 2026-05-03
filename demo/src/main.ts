@@ -1,50 +1,22 @@
 import './styles.css';
-import { createGraph } from '../../src';
-import {
-  demoNodes,
-  demoLinks,
-  demoInteractionConfig,
-} from './demo-data';
+import { createGraph, GraphNode } from '../../src';
+import { demoNodes, demoLinks, demoInteractionConfig } from './demo-data';
+import { LegendItem } from '../../src/contracts/graph-legends.interface';
 
-const graphWrapper =
-  document.getElementById(
-    'graph-wrapper',
-  ) as HTMLDivElement | null;
+const hostContainer = document.getElementById('graph-container') as HTMLElement | null;
 
-if (!graphWrapper) {
-  throw new Error(
-    'Graph wrapper not found',
-  );
-}
-
-const svgContainer =
-  document.getElementById(
-    'graph-container',
-  ) as SVGSVGElement | null;
-
-if (!svgContainer) {
-  throw new Error(
-    'Graph container not found',
-  );
+if (!hostContainer) {
+  throw new Error('Graph host container not found');
 }
 
 /**
- * Ensure SVG has explicit size.
- * D3 zoom + SVG extent calculations
- * require width/height to exist.
+ * The library now manages:
+ * 1. Creating the SVG canvas
+ * 2. Creating the HTML overlay
+ * 3. Handling resize automatically via ResizeObserver
  */
-svgContainer.setAttribute(
-  'width',
-  String(graphWrapper.clientWidth),
-);
-
-svgContainer.setAttribute(
-  'height',
-  String(graphWrapper.clientHeight),
-);
-
 const graph = createGraph({
-  container: svgContainer,
+  container: hostContainer, // Passing the HTMLElement
   nodes: demoNodes,
   links: demoLinks,
   interaction: demoInteractionConfig,
@@ -54,67 +26,49 @@ const graph = createGraph({
     orientation: 'vertical',
     offset: { x: 10, y: 10 },
   },
+  legend: {
+    enabled: true,
+    items: deriveLegendItems(demoNodes),
+    collapsible: true,
+    position: 'top-right'
+  }
+});
+
+document.getElementById('capture-btn')?.addEventListener('click', () => {
+  const htmlSnapshot = graph.exportGraph('hello');
+  console.log('Exported HTML (Controls removed):', htmlSnapshot);
+  
 });
 
 graph.render();
 
-const zoomInButton =
-  document.getElementById('zoom-in');
+// Note: You don't need manual event listeners for zoomIn/zoomOut 
+// if you enabled the built-in controls above, but if you have 
+// custom external buttons, they will still work:
+document.getElementById('zoom-in')?.addEventListener('click', () => graph.zoomIn());
+document.getElementById('zoom-out')?.addEventListener('click', () => graph.zoomOut());
+document.getElementById('reset-view')?.addEventListener('click', () => graph.resetView());
+document.getElementById('fit-view')?.addEventListener('click', () => graph.fitView());
 
-const zoomOutButton =
-  document.getElementById('zoom-out');
 
-const resetViewButton =
-  document.getElementById(
-    'reset-view',
-  );
 
-const fitViewButton =
-  document.getElementById(
-    'fit-view',
-  );
+/**
+ * Derives unique legend items based on node types and their styles.
+ */
+export function deriveLegendItems(nodes: GraphNode[]): LegendItem[] {
+  // 1. Get unique types from the node list
+  const uniqueTypes = [...new Set(nodes.map(node => node.type))];
 
-zoomInButton?.addEventListener(
-  'click',
-  (): void => {
-    graph.zoomIn();
-  },
-);
+  // 2. Map each type to a LegendItem structure
+  return uniqueTypes.map((type): LegendItem => {
+    // Find the first node of this type to steal its visual style
+    const sampleNode = nodes.find(node => node.type === type);
 
-zoomOutButton?.addEventListener(
-  'click',
-  (): void => {
-    graph.zoomOut();
-  },
-);
-
-resetViewButton?.addEventListener(
-  'click',
-  (): void => {
-    graph.resetView();
-  },
-);
-
-fitViewButton?.addEventListener(
-  'click',
-  (): void => {
-    graph.fitView();
-  },
-);
-
-window.addEventListener(
-  'resize',
-  (): void => {
-    svgContainer.setAttribute(
-      'width',
-      String(graphWrapper.clientWidth),
-    );
-
-    svgContainer.setAttribute(
-      'height',
-      String(graphWrapper.clientHeight),
-    );
-
-    graph.fitView();
-  },
-);
+    return {
+      label: type,
+      color: sampleNode?.style?.fill ?? '#cccccc',
+      // You can logically determine shape based on type if needed
+      shape: type === 'Drug' ? 'rect' : 'circle' 
+    };
+  });
+}

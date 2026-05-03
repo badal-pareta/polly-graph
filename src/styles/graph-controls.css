@@ -1,45 +1,46 @@
 .pg-controls {
+  position: absolute;
+  display: flex;
   background: #ffffff;
   border-radius: 12px;
-  box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.12),
-    0 6px 14px rgba(0, 0, 0, 0.06);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: absolute;
-  z-index: 10;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  pointer-events: auto; /* Re-enable clicks */
+  z-index: 20;
+  width: max-content;
+  --pg-offset: 16px;
 }
 
-.pg-controls button {
+/* Positioning */
+.pg-pos-top-left     { top: var(--pg-offset); left: var(--pg-offset); bottom: auto; right: auto; }
+.pg-pos-top-right    { top: var(--pg-offset); right: var(--pg-offset); bottom: auto; left: auto; }
+.pg-pos-bottom-left  { bottom: var(--pg-offset); left: var(--pg-offset); top: auto; right: auto; }
+.pg-pos-bottom-right { bottom: var(--pg-offset); right: var(--pg-offset); top: auto; left: auto; }
+
+/* Orientation */
+.pg-orient-vertical   { flex-direction: column; }
+.pg-orient-horizontal { flex-direction: row; }
+
+/* Buttons */
+.pg-control-btn {
   all: unset;
-  align-items: center;
-  background: transparent;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  cursor: pointer;
-  display: flex;
-  justify-content: center;
-  transition: background 120ms ease, transform 80ms ease;
-  height: 44px;
   width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease;
 }
 
-.pg-controls button:last-child {
-  border-bottom: none;
-}
+.pg-control-btn:hover { background: #f9fafb; }
 
-.pg-controls button:hover {
-  background: #f9fafb;
-}
+.pg-orient-vertical .pg-control-btn:not(:last-child) { border-bottom: 1px solid rgba(0,0,0,0.06); }
+.pg-orient-horizontal .pg-control-btn:not(:last-child) { border-right: 1px solid rgba(0,0,0,0.06); }
 
-.pg-controls button:active {
-  background: #f3f4f6;
-}
-
-.pg-controls button svg.pg-icon {
-  display: block;
-  fill: none;
-  height: 18px;
-  stroke: currentColor;
+.pg-control-btn svg.pg-icon {
   width: 18px;
+  height: 18px;
+  stroke: #475569;
+  stroke-width: 2;
+  fill: none;
 }

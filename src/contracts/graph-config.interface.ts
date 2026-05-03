@@ -1,4 +1,5 @@
 import { GraphControlsConfig } from './graph-controls.interface';
+import { LegendConfig } from './graph-legends.interface';
 import { GraphNode, GraphLink, NodeStyle, LinkStyle } from './graph.types';
 
 export type GraphTooltipTheme = 'dark' | 'light';
@@ -36,11 +37,12 @@ export interface GraphInteractionConfig {
 }
 
 export interface GraphConfig {
-  readonly container: SVGSVGElement;
+  readonly container: HTMLElement;
   readonly nodes: GraphNode[];
   readonly links: GraphLink[];
   readonly interaction?: GraphInteractionConfig;
   readonly controls?: GraphControlsConfig;
+  readonly legend?: LegendConfig;
 }
 
 export interface ControlsController {

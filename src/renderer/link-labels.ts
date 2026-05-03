@@ -29,7 +29,7 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
   const renderableLinks: RenderableLinkLabel[] = createRenderableLinks(params, links);
 
   const labelSelection = params.root
-    .select<SVGGElement>('.link-labels')
+    .select<SVGGElement>('[data-layer="link-labels"]')
     .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
     .data(renderableLinks, (item: RenderableLinkLabel): string => getLinkKey(item.link))
     .join('g')

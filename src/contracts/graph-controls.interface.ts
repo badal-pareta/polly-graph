@@ -1,8 +1,8 @@
-import { Coordinates } from './graph-generics.interface';
+import { Coordinates, Orientation, Position } from './graph-generics.interface';
 
-export type GraphControlsPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type GraphControlsPosition = Position;
 
-export type GraphControlsOrientation = 'vertical' | 'horizontal';
+export type GraphControlsOrientation = Orientation;
 
 export interface GraphControlsConfig {
   readonly enabled: boolean;

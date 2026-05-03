@@ -1,0 +1,132 @@
+/* --- Core Container --- */
+.pg-legend {
+  position: absolute;
+  pointer-events: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  min-width: 180px;
+  max-width: 280px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --pg-offset-x: 16px;
+  --pg-offset-y: 16px;
+}
+
+/* --- Positioning Logic (KEEPING YOUR ORIGINAL) --- */
+.pg-legend.pg-pos-top-left     { top: var(--pg-offset-y); left: var(--pg-offset-x); bottom: auto; right: auto; }
+.pg-legend.pg-pos-top-right    { top: var(--pg-offset-y); right: var(--pg-offset-x); bottom: auto; left: auto; }
+.pg-legend.pg-pos-bottom-left  { bottom: var(--pg-offset-y); left: var(--pg-offset-x); top: auto; right: auto; }
+.pg-legend.pg-pos-bottom-right { bottom: var(--pg-offset-y); right: var(--pg-offset-x); top: auto; left: auto; }
+
+/* --- Toggle Button --- */
+.pg-legend-toggle {
+  all: unset;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 8px;
+  z-index: 30;
+  transition: background-color 0.2s ease;
+}
+
+.pg-legend-toggle:hover {
+  background-color: #f1f5f9;
+}
+
+.pg-legend-toggle .pg-icon {
+  width: 18px;
+  height: 18px;
+  stroke: #64748b;
+  stroke-width: 2;
+  fill: none;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- ICON ROTATION UPDATE --- */
+
+/* For LEFT positioned: Start pointing LEFT (180deg) */
+[class*="-left"] .pg-legend-toggle .pg-icon {
+  transform: rotate(180deg);
+}
+/* When collapsed to the left, rotate to 0deg (point right to expand) */
+[class*="-left"].pg-is-collapsed .pg-legend-toggle .pg-icon {
+  transform: rotate(0deg);
+}
+
+/* For RIGHT positioned: Start pointing RIGHT (0deg) */
+[class*="-right"] .pg-legend-toggle .pg-icon {
+  transform: rotate(0deg);
+}
+/* When collapsed to the right, rotate to 180deg (point left to expand) */
+[class*="-right"].pg-is-collapsed .pg-legend-toggle .pg-icon {
+  transform: rotate(180deg);
+}
+
+/* --- Legend Body Content --- */
+.pg-legend-body {
+  padding: 1rem;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+  position: relative;
+  z-index: 10;
+}
+
+.pg-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Overlap prevention: ensure first label doesn't hit the toggle */
+.pg-legend-item:first-child {
+  padding-right: 32px;
+}
+
+.pg-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8125rem;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.pg-legend-swatch {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.pg-legend-swatch.is-circle { border-radius: 50%; }
+.pg-legend-swatch.is-rect   { border-radius: 3px; }
+
+/* --- Collapsed State Logic --- */
+.pg-is-collapsed {
+  min-width: 44px; 
+  max-width: 44px;
+  height: 44px;
+}
+
+.pg-is-collapsed .pg-legend-body {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  height: 0; 
+  padding: 0;
+  visibility: hidden; 
+}
