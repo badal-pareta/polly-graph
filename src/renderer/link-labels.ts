@@ -11,7 +11,10 @@ export interface RenderableLinkLabel {
 function createRenderableLinks(params: GraphRenderContext, links: GraphLink[]): RenderableLinkLabel[] {
   return links
     .map(
-      (link: GraphLink): RenderableLinkLabel => ({ link, style: resolveLinkStyle({ link, interaction: params.interaction }) }),
+      (link: GraphLink): RenderableLinkLabel => ({ 
+        link, 
+        style: resolveLinkStyle({ link, interaction: params.interaction }) 
+      }),
     )
     .filter(
       (item: RenderableLinkLabel): boolean => item.style.label.enabled && Boolean(item.link.label)
@@ -34,8 +37,28 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
     .data(renderableLinks, (item: RenderableLinkLabel): string => getLinkKey(item.link))
     .join('g')
     .attr('class', 'link-label')
-    .attr('pointer-events', 'auto')
-    .attr('cursor', 'pointer');
+    /**
+     * Managed Visual State:
+     * We avoid 'display: none' to preserve the ability to use D3 transitions 
+     * for smooth fading.
+     */
+    .style('opacity', (item: RenderableLinkLabel): number => {
+      const visibility = item.style.label.visibility ?? 'always';
+      return visibility === 'always' ? 1 : 0;
+    })
+    /**
+     * Managed Interaction State:
+     * When opacity is 0, we must set pointer-events to 'none' so these 
+     * "ghost" elements don't block interaction with nodes/links underneath.
+     */
+    .style('pointer-events', (item: RenderableLinkLabel): string => {
+      const visibility = item.style.label.visibility ?? 'always';
+      return visibility === 'always' ? 'auto' : 'none';
+    })
+    /**
+     * Cursor state is only active when pointer-events are 'auto'.
+     */
+    .style('cursor', 'pointer');
 
   labelSelection
     .selectAll<SVGRectElement, RenderableLinkLabel>('rect')

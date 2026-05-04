@@ -22,13 +22,23 @@ export function createGraphSimulation(config: SimulationConfig): SimulationResul
     .velocityDecay(0.5)
     .force('link', forceLink<GraphNode, GraphLink>(config.links)
       .id((d: GraphNode) => d.id)
-      .distance(150)
-      .strength(0.4)
+      .distance(d => {
+        // Dynamically calculate distance based on node radii
+        const source = d.source as GraphNode;
+        const target = d.target as GraphNode;
+        const sourceR = source.style?.radius || 20;
+        const targetR = target.style?.radius || 20;
+        const labelBuffer = d.style?.label?.height || 40;
+
+        // Formula: (SourceRadius + TargetRadius) + Padding
+        return ((sourceR + targetR) + labelBuffer) * 2; 
+      })
+      .strength(.8)
     )
     .force('charge', forceManyBody().strength(-220))
     .force('collide', forceCollide<GraphNode>()
       .radius((node: GraphNode): number => (node.style?.radius ?? 12) + 10)
-      .strength(0.9)
+      .iterations(2)
     )
     .force('center', forceCenter(centerX, centerY).strength(0.08));
 

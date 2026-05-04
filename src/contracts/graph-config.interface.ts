@@ -40,6 +40,16 @@ export interface GraphConfig {
   readonly container: HTMLElement;
   readonly nodes: GraphNode[];
   readonly links: GraphLink[];
+
+  readonly autoFit?: boolean;
+  readonly responsive?: boolean;
+
+  readonly simulation?: {
+    readonly alpha?: number;
+    readonly gravity?: number;
+    readonly linkDistance?: number | ((link: GraphLink) => number);
+  };
+
   readonly interaction?: GraphInteractionConfig;
   readonly controls?: GraphControlsConfig;
   readonly legend?: LegendConfig;

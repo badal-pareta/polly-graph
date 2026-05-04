@@ -129,7 +129,8 @@ export const demoLinks: GraphLink[] = [
       opacity: 0.9,
 
       label: {
-        enabled: false,
+        enabled: true,
+        visibility: 'hover'
       },
     },
   },

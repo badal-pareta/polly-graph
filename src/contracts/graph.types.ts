@@ -32,7 +32,8 @@ export interface LinkArrowStyle {
 }
 
 export interface LinkLabelStyle {
-  readonly enabled?: boolean; 
+  readonly enabled?: boolean;
+  readonly visibility?: 'always' | 'hover' | 'selection';
   readonly backgroundFill?: string;
   readonly borderColor?: string;
   readonly borderWidth?: number;
@@ -55,6 +56,7 @@ export interface LinkStyle {
 
 export interface ResolvedLinkLabelStyle {
   readonly enabled: boolean;
+  readonly visibility: 'always' | 'hover' | 'selection';
   readonly backgroundFill: string;
   readonly borderColor: string;
   readonly borderWidth: number;

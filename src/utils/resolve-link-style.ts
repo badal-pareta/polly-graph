@@ -20,6 +20,7 @@ const DEFAULT_LINK_STYLE: ResolvedLinkStyle = {
   },
   label: {
     enabled: true,
+    visibility: 'always',
     backgroundFill: 'color-mix(in srgb, #8E42EE, #FFFFFF 90%)',
     borderColor: 'color-mix(in srgb, #8E42EE, #FFFFFF 10%)',
     borderWidth: 1.5,
@@ -61,6 +62,7 @@ function mergeLinkStyle(base: ResolvedLinkStyle, override?: Partial<LinkStyle>):
     },
     label: {
       enabled: override?.label?.enabled ?? base.label.enabled,
+      visibility: override?.label?.visibility ?? base.label.visibility,
       backgroundFill:
         override?.label?.backgroundFill ??
         base.label.backgroundFill,

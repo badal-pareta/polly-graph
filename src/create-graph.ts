@@ -2,7 +2,7 @@
 import 'd3-transition';
 import { select } from 'd3-selection';
 import { ZoomBehavior, zoomIdentity } from 'd3-zoom';
-import { Simulation, forceX, forceY } from 'd3-force';
+import { Simulation, forceCenter } from 'd3-force';
 
 // Internal Core & Layering
 import { createGraphLayers } from './core/create-graph-layers';
@@ -41,6 +41,9 @@ export function createGraph(config: GraphConfig): GraphInstance {
   let controls: GraphControlsInstance | null = null;
   let legendCleanup: VoidFunction | null = null;
 
+  // Timers for managing async transitions and debouncing
+  let fitViewTimer: ReturnType<typeof setTimeout> | null = null;
+
   let dimensions: GraphDimensions = { width: 0, height: 0 };
   let rootGroup: SVGGElement | null = null;
   let svgElement: SVGSVGElement | null = null;
@@ -55,16 +58,32 @@ export function createGraph(config: GraphConfig): GraphInstance {
     svgElement = layers.svg;
     rootGroup = layers.root;
 
+    /**
+     * Managed Resize Logic:
+     * Resolves alignment and centering shifts seen during fullscreen transitions.
+     * Uses a debounce to prevent the jitter observed in Recording 2026-05-04 at 13.48.29.gif.
+     */
     cleanupResize = observeResize(config.container, (width: number, height: number): void => {
       dimensions = { width, height };
+
+      // Update SVG viewport immediately
       layers.svg.setAttribute('width', String(width));
       layers.svg.setAttribute('height', String(height));
       layers.interactionRect.setAttribute('width', String(width));
       layers.interactionRect.setAttribute('height', String(height));
 
-      simulation?.force('x', forceX(width / 2).strength(0.03));
-      simulation?.force('y', forceY(height / 2).strength(0.03));
-      simulation?.alpha(0.25).restart();
+      if (simulation) {
+        // Corrects the "Off-Center" issue by anchoring the physics engine to the new viewport middle
+        simulation.force('center', forceCenter(width / 2, height / 2));
+        simulation.alpha(0.3).restart();
+      }
+
+      // Debounce the fitView to wait for the browser layout to settle
+      if (fitViewTimer) { clearTimeout(fitViewTimer); }
+      fitViewTimer = setTimeout(() => {
+        fitView();
+        fitViewTimer = null;
+      }, 150);
     });
 
     const zoomResult = createZoom({
@@ -87,8 +106,9 @@ export function createGraph(config: GraphConfig): GraphInstance {
     const simulationConfig: SimulationConfig = {
       nodes: config.nodes,
       links: config.links,
-      width: config.container.clientWidth,
-      height: config.container.clientHeight
+      // Uses the observed dimensions to ensure physics are calculated on actual container size
+      width: dimensions.width || config.container.clientWidth,
+      height: dimensions.height || config.container.clientHeight
     };
 
     const simulationResult = createGraphSimulation(simulationConfig);
@@ -165,7 +185,7 @@ export function createGraph(config: GraphConfig): GraphInstance {
 
   function resetView(): void {
     if (!zoomBehavior || !svgElement) return;
-    select(svgElement).transition().call(zoomBehavior.transform, zoomIdentity);
+    select(svgElement).transition().duration(400).call(zoomBehavior.transform, zoomIdentity);
   }
 
   function fitView(): void {
@@ -178,7 +198,8 @@ export function createGraph(config: GraphConfig): GraphInstance {
     const translateY: number = (dimensions.height - bounds.height * scale) / 2 - bounds.y * scale;
 
     const transform = zoomIdentity.translate(translateX, translateY).scale(scale);
-    select(svgElement).transition().call(zoomBehavior.transform, transform);
+    // Smooth transition to settle the graph after size changes
+    select(svgElement).transition().duration(400).call(zoomBehavior.transform, transform);
   }
 
   function zoomIn(): void {
@@ -191,18 +212,10 @@ export function createGraph(config: GraphConfig): GraphInstance {
     select(svgElement).transition().call(zoomBehavior.scaleBy, 0.8);
   }
 
-/**
-   * Triggers the high-quality image capture and download.
-   */
   async function exportGraph(fileName?: string): Promise<void> {
-    // 1. Force the graph to fit the viewport
     fitView();
-
-    // 2. Small delay to allow D3 transitions to settle (e.g., 300ms-500ms)
-    // If your fitView is instant (no .transition()), you can skip this.
+    // Buffer to ensure fitView transition finishes before screenshot capture
     await new Promise(resolve => setTimeout(resolve, 500));
-
-    // 3. Proceed with capture
     await captureAndDownloadGraph(config.container, {
       fileName,
       pixelRatio: 2 
@@ -210,6 +223,12 @@ export function createGraph(config: GraphConfig): GraphInstance {
   }
 
   function destroy(): void {
+    // Clear active timers to prevent execution after destruction
+    if (fitViewTimer) { 
+      clearTimeout(fitViewTimer); 
+      fitViewTimer = null; 
+    }
+    
     if (cleanupResize) { cleanupResize(); cleanupResize = null; }
     if (cleanupZoom) { cleanupZoom(); cleanupZoom = null; }
     if (tooltipBinding) { tooltipBinding.destroy(); tooltipBinding = null; }
