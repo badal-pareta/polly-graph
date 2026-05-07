@@ -5,6 +5,9 @@ import { GraphNode, GraphLink, NodeStyle, LinkStyle } from './graph.types';
 export type GraphTooltipTheme = 'dark' | 'light';
 export type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right' | 'auto';
 
+export type NodeSelectHandler = (node: GraphNode, element: SVGCircleElement) => void;
+export type LinkSelectHandler = (link: GraphLink, element: SVGLineElement) => void;
+
 export interface TooltipInteractionConfig {
   readonly enabled?: boolean;
   readonly theme?: GraphTooltipTheme;

@@ -8,7 +8,6 @@ import { Simulation, forceCenter } from 'd3-force';
 import { createGraphLayers } from './core/create-graph-layers';
 import { createZoom } from './core/create-zoom';
 import { createGraphSimulation } from './core/create-graph-simulation';
-import { createArrowMarker } from './core/create-arrow-marker';
 
 // Components & UI
 import { createGraphControls, GraphControlsInstance } from './controls/create-graph-controls';
@@ -27,9 +26,10 @@ import { bindNodeTooltip, NodeTooltipBinding } from './interactions/bind-node-to
 import { observeResize } from './utils/observe-resize';
 import { getLinkTargetPoint } from './utils/get-link-target-point';
 import { captureAndDownloadGraph } from './utils/export-graph';
+import { deselectNode, deselectLink, selectLink, createLinkHitArea } from './utils/node-link-selection.utils';
 
 // Types
-import { GraphConfig } from './contracts/graph-config.interface';
+import { GraphConfig, NodeSelectHandler, LinkSelectHandler } from './contracts/graph-config.interface';
 import { GraphInstance } from './contracts/graph-instance.interface';
 import { GraphDimensions } from './contracts/resize.interface';
 import { GraphNode, GraphLink } from './contracts/graph.types';
@@ -52,31 +52,41 @@ export function createGraph(config: GraphConfig): GraphInstance {
   let zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> | null = null;
   let simulation: Simulation<GraphNode, GraphLink> | null = null;
 
-  type NodeSelectHandler = (node: GraphNode, element: SVGCircleElement) => void;
-  type LinkSelectHandler = (link: GraphLink, element: SVGLineElement) => void;
-
   const nodeSelectHandlers = new Set<NodeSelectHandler>();
+  const nodeDeselectHandlers = new Set<NodeSelectHandler>();
   const linkSelectHandlers = new Set<LinkSelectHandler>();
+  const linkDeselectHandlers = new Set<LinkSelectHandler>();
 
   function on(event: 'nodeSelect', handler: NodeSelectHandler): () => void;
+  function on(event: 'nodeDeselect', handler: NodeSelectHandler): () => void;
   function on(event: 'linkSelect', handler: LinkSelectHandler): () => void;
+  function on(event: 'linkDeselect', handler: LinkSelectHandler): () => void;
   function on(event: string, handler: NodeSelectHandler | LinkSelectHandler): () => void {
     if (event === 'nodeSelect') {
       nodeSelectHandlers.add(handler as NodeSelectHandler);
       return (): void => { nodeSelectHandlers.delete(handler as NodeSelectHandler); };
     }
-    linkSelectHandlers.add(handler as LinkSelectHandler);
-    return (): void => { linkSelectHandlers.delete(handler as LinkSelectHandler); };
+    if (event === 'nodeDeselect') {
+      nodeDeselectHandlers.add(handler as NodeSelectHandler);
+      return (): void => { nodeDeselectHandlers.delete(handler as NodeSelectHandler); };
+    }
+    if (event === 'linkSelect') {
+      linkSelectHandlers.add(handler as LinkSelectHandler);
+      return (): void => { linkSelectHandlers.delete(handler as LinkSelectHandler); };
+    }
+    linkDeselectHandlers.add(handler as LinkSelectHandler);
+    return (): void => { linkDeselectHandlers.delete(handler as LinkSelectHandler); };
   }
 
   function off(event: 'nodeSelect', handler: NodeSelectHandler): void;
+  function off(event: 'nodeDeselect', handler: NodeSelectHandler): void;
   function off(event: 'linkSelect', handler: LinkSelectHandler): void;
+  function off(event: 'linkDeselect', handler: LinkSelectHandler): void;
   function off(event: string, handler: NodeSelectHandler | LinkSelectHandler): void {
-    if (event === 'nodeSelect') {
-      nodeSelectHandlers.delete(handler as NodeSelectHandler);
-    } else {
-      linkSelectHandlers.delete(handler as LinkSelectHandler);
-    }
+    if (event === 'nodeSelect') { nodeSelectHandlers.delete(handler as NodeSelectHandler); }
+    else if (event === 'nodeDeselect') { nodeDeselectHandlers.delete(handler as NodeSelectHandler); }
+    else if (event === 'linkSelect') { linkSelectHandlers.delete(handler as LinkSelectHandler); }
+    else { linkDeselectHandlers.delete(handler as LinkSelectHandler); }
   }
 
   function render(): void {
@@ -210,51 +220,18 @@ export function createGraph(config: GraphConfig): GraphInstance {
         linkMarkerSnapshots.set(linkElement, linkElement.getAttribute('marker-end'));
       });
 
-      const deselectNode = (): void => {
-        if (!selectedNodeElement) { return; }
-        const nodeElement = selectedNodeElement;
-        nodeElement.style.fill = '';
-        nodeElement.style.stroke = '';
-        nodeElement.style.strokeWidth = '';
-        nodeElement.style.opacity = '';
-        nodeElement.style.removeProperty('r');
-        root
-          .selectAll<SVGGElement, RenderableLinkLabel>('.link-label.label-selection-pinned')
-          .classed('label-selection-pinned', false)
-          .interrupt()
-          .transition()
-          .duration(200)
-          .style('opacity', 0)
-          .style('pointer-events', 'none');
-        selectedNodeElement = null;
-      };
-
-      const deselectLink = (): void => {
-        if (!selectedLinkElement) { return; }
-        const linkElement = selectedLinkElement;
-        linkElement.style.stroke = '';
-        linkElement.style.strokeWidth = '';
-        linkElement.style.opacity = '';
-        const originalMarkerEnd = linkMarkerSnapshots.get(linkElement);
-        if (originalMarkerEnd) {
-          linkElement.setAttribute('marker-end', originalMarkerEnd);
-        } else {
-          linkElement.removeAttribute('marker-end');
-        }
-        selectedLinkElement = null;
-      };
-
       nodeSelection.on('click.select', function(event: MouseEvent, node: GraphNode): void {
         event.stopPropagation();
         const nodeElement = this as SVGCircleElement;
 
         if (selectedNodeElement === nodeElement) {
-          deselectNode();
+          deselectNode(nodeElement, root, nodeSelectHandlers, nodeDeselectHandlers);
+          selectedNodeElement = null;
           return;
         }
 
-        deselectNode();
-        deselectLink();
+        if (selectedNodeElement) { deselectNode(selectedNodeElement, root, nodeSelectHandlers, nodeDeselectHandlers); selectedNodeElement = null; }
+        if (selectedLinkElement) { deselectLink(selectedLinkElement, linkMarkerSnapshots, linkSelectHandlers, linkDeselectHandlers); selectedLinkElement = null; }
         selectedNodeElement = nodeElement;
 
         const nodeStyle = selectionConfig.nodeStyle;
@@ -284,52 +261,22 @@ export function createGraph(config: GraphConfig): GraphInstance {
         nodeSelectHandlers.forEach(handler => handler(node, nodeElement));
       });
 
-      const selectLink = (event: MouseEvent, renderableLink: RenderableGraphLink, linkElement: SVGLineElement): void => {
-        event.stopPropagation();
+      linkSelection.on('click.select', function(event: MouseEvent, renderableLink: RenderableGraphLink): void {
+        const linkElement = this as SVGLineElement;
 
         if (selectedLinkElement === linkElement) {
-          deselectLink();
+          deselectLink(linkElement, linkMarkerSnapshots, linkSelectHandlers, linkDeselectHandlers);
+          selectedLinkElement = null;
           return;
         }
 
-        deselectLink();
-        deselectNode();
+        if (selectedLinkElement) { deselectLink(selectedLinkElement, linkMarkerSnapshots, linkSelectHandlers, linkDeselectHandlers); selectedLinkElement = null; }
+        if (selectedNodeElement) { deselectNode(selectedNodeElement, root, nodeSelectHandlers, nodeDeselectHandlers); selectedNodeElement = null; }
         selectedLinkElement = linkElement;
-
-        const linkStyle = selectionConfig.linkStyle;
-        if (linkStyle) {
-          if (linkStyle.stroke !== undefined) { linkElement.style.stroke = linkStyle.stroke; }
-          if (linkStyle.strokeWidth !== undefined) { linkElement.style.strokeWidth = String(linkStyle.strokeWidth); }
-          if (linkStyle.opacity !== undefined) { linkElement.style.opacity = String(linkStyle.opacity); }
-
-          if (linkStyle.stroke !== undefined && renderableLink.style.arrow.enabled) {
-            const selectionMarkerStyle = {
-              stroke: linkStyle.stroke,
-              arrow: { fill: linkStyle.stroke, size: renderableLink.style.arrow.size }
-            };
-            const selectionMarkerId = createArrowMarker({ svg: layers.svg, style: selectionMarkerStyle });
-            select(linkElement).attr('marker-end', `url(#${selectionMarkerId})`);
-          }
-        }
-
-        linkSelectHandlers.forEach(handler => handler(renderableLink.link, linkElement));
-      };
-
-      linkSelection.on('click.select', function(event: MouseEvent, renderableLink: RenderableGraphLink): void {
-        selectLink(event, renderableLink, this as SVGLineElement);
+        selectLink(event, renderableLink, linkElement, selectionConfig, layers, linkSelectHandlers);
       });
 
-      const linkHitAreaSelection = root
-        .select('[data-layer="links"]')
-        .selectAll<SVGLineElement, RenderableGraphLink>('line.link-hit-area')
-        .data(linkSelection.data())
-        .join('line')
-        .attr('class', 'link-hit-area')
-        .attr('stroke', 'rgba(0,0,0,0)')
-        .attr('stroke-width', (item: RenderableGraphLink): number => item.style.arrow.size * 4)
-        .style('pointer-events', 'stroke')
-        .style('cursor', 'pointer')
-        .attr('opacity', 0);
+      const linkHitAreaSelection = createLinkHitArea(root, linkSelection);
 
       simulation!.on('tick.hitarea', (): void => {
         linkHitAreaSelection
@@ -342,13 +289,21 @@ export function createGraph(config: GraphConfig): GraphInstance {
       linkHitAreaSelection.on('click.select', function(event: MouseEvent, renderableLink: RenderableGraphLink): void {
         const visibleLinkNode = linkSelection.filter(d => d === renderableLink).node();
         if (visibleLinkNode) {
-          selectLink(event, renderableLink, visibleLinkNode);
+          if (selectedLinkElement === visibleLinkNode) {
+            deselectLink(visibleLinkNode, linkMarkerSnapshots, linkSelectHandlers, linkDeselectHandlers);
+            selectedLinkElement = null;
+            return;
+          }
+          if (selectedLinkElement) { deselectLink(selectedLinkElement, linkMarkerSnapshots, linkSelectHandlers, linkDeselectHandlers); selectedLinkElement = null; }
+          if (selectedNodeElement) { deselectNode(selectedNodeElement, root, nodeSelectHandlers, nodeDeselectHandlers); selectedNodeElement = null; }
+          selectedLinkElement = visibleLinkNode;
+          selectLink(event, renderableLink, visibleLinkNode, selectionConfig, layers, linkSelectHandlers);
         }
       });
 
       select(layers.svg).on('click.deselect', (): void => {
-        deselectNode();
-        deselectLink();
+        if (selectedNodeElement) { deselectNode(selectedNodeElement, root, nodeSelectHandlers, nodeDeselectHandlers); selectedNodeElement = null; }
+        if (selectedLinkElement) { deselectLink(selectedLinkElement, linkMarkerSnapshots, linkSelectHandlers, linkDeselectHandlers); selectedLinkElement = null; }
       });
     }
 

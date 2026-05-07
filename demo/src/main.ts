@@ -40,19 +40,32 @@ document.getElementById('capture-btn')?.addEventListener('click', () => {
   
 });
 
-graph.on('nodeSelect', (node, element) => {
-  console.log('Node selected:', node, element);
+function registerNodeSelectHandler(): void {
+  graph.on('nodeSelect', (node, element) => {
+    console.log('Node selected:', node, element);
+  });
+}
+
+function registerLinkSelectHandler(): void {
+  graph.on('linkSelect', (link, element) => {
+    console.log('Link selected:', link, element);
+  });
+}
+
+// Re-register select handlers after each deselection
+graph.on('nodeDeselect', (node) => {
+  console.log('Node deselected:', node.id);
+  registerNodeSelectHandler();
 });
 
-graph.on('linkSelect', (link, element) => {
-  console.log('Link selected:', link, element);
+graph.on('linkDeselect', (link) => {
+  console.log('Link deselected:', link.label);
+  registerLinkSelectHandler();
 });
 
-// off() demo — fires once, then unsubscribes itself
-const unsubscribeOnce = graph.on('nodeSelect', (node) => {
-  console.log('This fires only once — node:', node.id);
-  unsubscribeOnce();
-});
+// Initial registration
+registerNodeSelectHandler();
+registerLinkSelectHandler();
 
 graph.render();
 
