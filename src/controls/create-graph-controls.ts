@@ -9,13 +9,15 @@ export interface GraphControlsInstance {
   destroy(): void;
 }
 
+type GraphControlsActions = Pick<GraphInstance, 'zoomIn' | 'zoomOut' | 'fitView' | 'resetView'>;
+
 /**
  * Refactored to target the HTML Overlay instead of the SVG's parent.
  * Uses Class-based positioning for better maintainability.
  */
 export function createGraphControls(
-  overlay: HTMLElement, 
-  graph: GraphInstance, 
+  overlay: HTMLElement,
+  graph: GraphControlsActions,
   config: GraphControlsConfig
 ): GraphControlsInstance {
   let root: HTMLDivElement | null = null;
@@ -47,7 +49,7 @@ export function createGraphControls(
     overlay.appendChild(root);
   }
 
-  function appendControls(root: HTMLElement, config: GraphControlsConfig, graph: GraphInstance): void {
+  function appendControls(root: HTMLElement, config: GraphControlsConfig, graph: GraphControlsActions): void {
     /**
      * Map configuration keys to specific graph actions.
      * Typed as keyof NonNullable<GraphControlsConfig['show']> to fix the 'any' lint error.

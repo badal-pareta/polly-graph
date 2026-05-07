@@ -69,7 +69,8 @@ export function renderLinks(ctx: GraphRenderContext, links: GraphLink[]): Select
     .attr('opacity', (item: RenderableGraphLink): number => item.style.opacity)
     .attr('marker-end', (item: RenderableGraphLink): string => item.markerEnd)
     // Ensures thin lines are easily hoverable by capturing events on the stroke area
-    .style('pointer-events', 'stroke');
+    .style('pointer-events', 'stroke')
+    .style('cursor', 'pointer');
 
   /**
    * Managed Link Label Hover:

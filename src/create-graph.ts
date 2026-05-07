@@ -8,6 +8,7 @@ import { Simulation, forceCenter } from 'd3-force';
 import { createGraphLayers } from './core/create-graph-layers';
 import { createZoom } from './core/create-zoom';
 import { createGraphSimulation } from './core/create-graph-simulation';
+import { createArrowMarker } from './core/create-arrow-marker';
 
 // Components & UI
 import { createGraphControls, GraphControlsInstance } from './controls/create-graph-controls';
@@ -50,6 +51,33 @@ export function createGraph(config: GraphConfig): GraphInstance {
 
   let zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> | null = null;
   let simulation: Simulation<GraphNode, GraphLink> | null = null;
+
+  type NodeSelectHandler = (node: GraphNode, element: SVGCircleElement) => void;
+  type LinkSelectHandler = (link: GraphLink, element: SVGLineElement) => void;
+
+  const nodeSelectHandlers = new Set<NodeSelectHandler>();
+  const linkSelectHandlers = new Set<LinkSelectHandler>();
+
+  function on(event: 'nodeSelect', handler: NodeSelectHandler): () => void;
+  function on(event: 'linkSelect', handler: LinkSelectHandler): () => void;
+  function on(event: string, handler: NodeSelectHandler | LinkSelectHandler): () => void {
+    if (event === 'nodeSelect') {
+      nodeSelectHandlers.add(handler as NodeSelectHandler);
+      return (): void => { nodeSelectHandlers.delete(handler as NodeSelectHandler); };
+    }
+    linkSelectHandlers.add(handler as LinkSelectHandler);
+    return (): void => { linkSelectHandlers.delete(handler as LinkSelectHandler); };
+  }
+
+  function off(event: 'nodeSelect', handler: NodeSelectHandler): void;
+  function off(event: 'linkSelect', handler: LinkSelectHandler): void;
+  function off(event: string, handler: NodeSelectHandler | LinkSelectHandler): void {
+    if (event === 'nodeSelect') {
+      nodeSelectHandlers.delete(handler as NodeSelectHandler);
+    } else {
+      linkSelectHandlers.delete(handler as LinkSelectHandler);
+    }
+  }
 
   function render(): void {
     destroy();
@@ -169,10 +197,165 @@ export function createGraph(config: GraphConfig): GraphInstance {
       nodeSelection.call(createDragBehavior(simulation));
     }
 
+    const selectionConfig = config.interaction?.selection;
+    if (selectionConfig?.enabled) {
+      let selectedNodeElement: SVGCircleElement | null = null;
+      let selectedLinkElement: SVGLineElement | null = null;
+
+      // Only marker-end needs snapshotting — it's an SVG attribute, not a CSS property.
+      // All other selection styles use inline CSS which the cascade handles automatically.
+      const linkMarkerSnapshots = new Map<SVGLineElement, string | null>();
+      linkSelection.each(function(): void {
+        const linkElement = this as SVGLineElement;
+        linkMarkerSnapshots.set(linkElement, linkElement.getAttribute('marker-end'));
+      });
+
+      const deselectNode = (): void => {
+        if (!selectedNodeElement) { return; }
+        const nodeElement = selectedNodeElement;
+        nodeElement.style.fill = '';
+        nodeElement.style.stroke = '';
+        nodeElement.style.strokeWidth = '';
+        nodeElement.style.opacity = '';
+        nodeElement.style.removeProperty('r');
+        root
+          .selectAll<SVGGElement, RenderableLinkLabel>('.link-label.label-selection-pinned')
+          .classed('label-selection-pinned', false)
+          .interrupt()
+          .transition()
+          .duration(200)
+          .style('opacity', 0)
+          .style('pointer-events', 'none');
+        selectedNodeElement = null;
+      };
+
+      const deselectLink = (): void => {
+        if (!selectedLinkElement) { return; }
+        const linkElement = selectedLinkElement;
+        linkElement.style.stroke = '';
+        linkElement.style.strokeWidth = '';
+        linkElement.style.opacity = '';
+        const originalMarkerEnd = linkMarkerSnapshots.get(linkElement);
+        if (originalMarkerEnd) {
+          linkElement.setAttribute('marker-end', originalMarkerEnd);
+        } else {
+          linkElement.removeAttribute('marker-end');
+        }
+        selectedLinkElement = null;
+      };
+
+      nodeSelection.on('click.select', function(event: MouseEvent, node: GraphNode): void {
+        event.stopPropagation();
+        const nodeElement = this as SVGCircleElement;
+
+        if (selectedNodeElement === nodeElement) {
+          deselectNode();
+          return;
+        }
+
+        deselectNode();
+        deselectLink();
+        selectedNodeElement = nodeElement;
+
+        const nodeStyle = selectionConfig.nodeStyle;
+        if (nodeStyle) {
+          if (nodeStyle.fill !== undefined) { nodeElement.style.fill = nodeStyle.fill; }
+          if (nodeStyle.stroke !== undefined) { nodeElement.style.stroke = nodeStyle.stroke; }
+          if (nodeStyle.strokeWidth !== undefined) { nodeElement.style.strokeWidth = String(nodeStyle.strokeWidth); }
+          if (nodeStyle.opacity !== undefined) { nodeElement.style.opacity = String(nodeStyle.opacity); }
+          if (nodeStyle.radius !== undefined) { nodeElement.style.setProperty('r', String(nodeStyle.radius)); }
+        }
+
+        root
+          .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
+          .filter((item: RenderableLinkLabel): boolean => {
+            if (item.style.label.visibility !== 'hover') { return false; }
+            const source = item.link.source as GraphNode;
+            const target = item.link.target as GraphNode;
+            return source.id === node.id || target.id === node.id;
+          })
+          .classed('label-selection-pinned', true)
+          .interrupt()
+          .transition()
+          .duration(200)
+          .style('opacity', 1)
+          .style('pointer-events', 'auto');
+
+        nodeSelectHandlers.forEach(handler => handler(node, nodeElement));
+      });
+
+      const selectLink = (event: MouseEvent, renderableLink: RenderableGraphLink, linkElement: SVGLineElement): void => {
+        event.stopPropagation();
+
+        if (selectedLinkElement === linkElement) {
+          deselectLink();
+          return;
+        }
+
+        deselectLink();
+        deselectNode();
+        selectedLinkElement = linkElement;
+
+        const linkStyle = selectionConfig.linkStyle;
+        if (linkStyle) {
+          if (linkStyle.stroke !== undefined) { linkElement.style.stroke = linkStyle.stroke; }
+          if (linkStyle.strokeWidth !== undefined) { linkElement.style.strokeWidth = String(linkStyle.strokeWidth); }
+          if (linkStyle.opacity !== undefined) { linkElement.style.opacity = String(linkStyle.opacity); }
+
+          if (linkStyle.stroke !== undefined && renderableLink.style.arrow.enabled) {
+            const selectionMarkerStyle = {
+              stroke: linkStyle.stroke,
+              arrow: { fill: linkStyle.stroke, size: renderableLink.style.arrow.size }
+            };
+            const selectionMarkerId = createArrowMarker({ svg: layers.svg, style: selectionMarkerStyle });
+            select(linkElement).attr('marker-end', `url(#${selectionMarkerId})`);
+          }
+        }
+
+        linkSelectHandlers.forEach(handler => handler(renderableLink.link, linkElement));
+      };
+
+      linkSelection.on('click.select', function(event: MouseEvent, renderableLink: RenderableGraphLink): void {
+        selectLink(event, renderableLink, this as SVGLineElement);
+      });
+
+      const linkHitAreaSelection = root
+        .select('[data-layer="links"]')
+        .selectAll<SVGLineElement, RenderableGraphLink>('line.link-hit-area')
+        .data(linkSelection.data())
+        .join('line')
+        .attr('class', 'link-hit-area')
+        .attr('stroke', 'rgba(0,0,0,0)')
+        .attr('stroke-width', (item: RenderableGraphLink): number => item.style.arrow.size * 4)
+        .style('pointer-events', 'stroke')
+        .style('cursor', 'pointer')
+        .attr('opacity', 0);
+
+      simulation!.on('tick.hitarea', (): void => {
+        linkHitAreaSelection
+          .attr('x1', (item: RenderableGraphLink): number => (item.link.source as GraphNode).x ?? 0)
+          .attr('y1', (item: RenderableGraphLink): number => (item.link.source as GraphNode).y ?? 0)
+          .attr('x2', (item: RenderableGraphLink): number => (item.link.target as GraphNode).x ?? 0)
+          .attr('y2', (item: RenderableGraphLink): number => (item.link.target as GraphNode).y ?? 0);
+      });
+
+      linkHitAreaSelection.on('click.select', function(event: MouseEvent, renderableLink: RenderableGraphLink): void {
+        const visibleLinkNode = linkSelection.filter(d => d === renderableLink).node();
+        if (visibleLinkNode) {
+          selectLink(event, renderableLink, visibleLinkNode);
+        }
+      });
+
+      select(layers.svg).on('click.deselect', (): void => {
+        deselectNode();
+        deselectLink();
+      });
+    }
+
     if (config.controls?.enabled) {
       controls = createGraphControls(
-        layers.overlay, 
-        { zoomIn, zoomOut, resetView, fitView, destroy, render, exportGraph }, 
+        layers.overlay,
+        { zoomIn, zoomOut, resetView, fitView },
         config.controls
       );
       controls.mount();
@@ -184,14 +367,14 @@ export function createGraph(config: GraphConfig): GraphInstance {
   }
 
   function resetView(): void {
-    if (!zoomBehavior || !svgElement) return;
+    if (!zoomBehavior || !svgElement) { return; }
     select(svgElement).transition().duration(400).call(zoomBehavior.transform, zoomIdentity);
   }
 
   function fitView(): void {
-    if (!zoomBehavior || !rootGroup || !svgElement || dimensions.width === 0 || dimensions.height === 0) return;
+    if (!zoomBehavior || !rootGroup || !svgElement || dimensions.width === 0 || dimensions.height === 0) { return; }
     const bounds: DOMRect = rootGroup.getBBox();
-    if (bounds.width === 0 || bounds.height === 0) return;
+    if (bounds.width === 0 || bounds.height === 0) { return; }
 
     const scale: number = Math.min(dimensions.width / bounds.width, dimensions.height / bounds.height) * 0.9;
     const translateX: number = (dimensions.width - bounds.width * scale) / 2 - bounds.x * scale;
@@ -203,12 +386,12 @@ export function createGraph(config: GraphConfig): GraphInstance {
   }
 
   function zoomIn(): void {
-    if (!zoomBehavior || !svgElement) return;
+    if (!zoomBehavior || !svgElement) { return; }
     select(svgElement).transition().call(zoomBehavior.scaleBy, 1.2);
   }
 
   function zoomOut(): void {
-    if (!zoomBehavior || !svgElement) return;
+    if (!zoomBehavior || !svgElement) { return; }
     select(svgElement).transition().call(zoomBehavior.scaleBy, 0.8);
   }
 
@@ -245,5 +428,5 @@ export function createGraph(config: GraphConfig): GraphInstance {
     }
   }
 
-  return { render, zoomIn, zoomOut, resetView, fitView, destroy, exportGraph };
+  return { render, zoomIn, zoomOut, resetView, fitView, destroy, exportGraph, on, off };
 }

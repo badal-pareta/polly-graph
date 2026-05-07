@@ -40,6 +40,20 @@ document.getElementById('capture-btn')?.addEventListener('click', () => {
   
 });
 
+graph.on('nodeSelect', (node, element) => {
+  console.log('Node selected:', node, element);
+});
+
+graph.on('linkSelect', (link, element) => {
+  console.log('Link selected:', link, element);
+});
+
+// off() demo — fires once, then unsubscribes itself
+const unsubscribeOnce = graph.on('nodeSelect', (node) => {
+  console.log('This fires only once — node:', node.id);
+  unsubscribeOnce();
+});
+
 graph.render();
 
 // Note: You don't need manual event listeners for zoomIn/zoomOut 

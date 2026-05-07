@@ -61,7 +61,10 @@ export function createNodeHover(
     })
     .on('mouseleave.labels', (_event) => {
       labelSelection
-        .filter(item => item.style.label.visibility === 'hover')
+        .filter(function(item: RenderableLinkLabel): boolean {
+          return item.style.label.visibility === 'hover' &&
+                 !(this as SVGGElement).classList.contains('label-selection-pinned');
+        })
         .interrupt()
         .transition()
         .duration(200)
