@@ -41,7 +41,7 @@ export function renderNodeLabels(
     )
     .attr(
       'font-size',
-      11
+      9
     )
     .attr(
       'fill',

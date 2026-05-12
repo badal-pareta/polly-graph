@@ -3,7 +3,6 @@ import { GraphLink, GraphNode, ResolvedLinkStyle } from '../contracts/graph.type
 import { GraphRenderContext } from '../contracts/renderer.interface';
 import { resolveLinkStyle } from '../utils/resolve-link-style';
 import { createArrowMarker } from '../core/create-arrow-marker';
-import { RenderableLinkLabel } from './link-labels';
 
 export interface RenderableGraphLink {
   readonly link: GraphLink;
@@ -72,29 +71,6 @@ export function renderLinks(ctx: GraphRenderContext, links: GraphLink[]): Select
     .style('pointer-events', 'stroke')
     .style('cursor', 'pointer');
 
-  /**
-   * Managed Link Label Hover:
-   * Reveals the associated label for this specific link if visibility is set to 'hover'.
-   */
-  const labelSelection = ctx.root.selectAll<SVGGElement, RenderableLinkLabel>('.link-label');
-
-  linkSelection
-    .on('mouseenter.label-hover', (_event, d: RenderableGraphLink) => {
-      labelSelection
-        .filter(labelItem => labelItem.link === d.link && labelItem.style.label.visibility === 'hover')
-        .interrupt()
-        .transition()
-        .duration(200)
-        .style('opacity', 1);
-    })
-    .on('mouseleave.label-hover', (_event, d: RenderableGraphLink) => {
-      labelSelection
-        .filter(labelItem => labelItem.link === d.link && labelItem.style.label.visibility === 'hover')
-        .interrupt()
-        .transition()
-        .duration(200)
-        .style('opacity', 0);
-    });
 
   return linkSelection;
 }

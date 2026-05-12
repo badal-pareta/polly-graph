@@ -8,6 +8,7 @@ export interface GraphInstance {
   fitView(): void;
   destroy(): void;
   exportGraph(fileName?: string): void;
+  clearSelection(): void;
   on(event: 'nodeSelect', handler: (node: GraphNode, element: SVGCircleElement) => void): () => void;
   on(event: 'nodeDeselect', handler: (node: GraphNode, element: SVGCircleElement) => void): () => void;
   on(event: 'linkSelect', handler: (link: GraphLink, element: SVGLineElement) => void): () => void;

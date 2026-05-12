@@ -26,7 +26,7 @@ const DEFAULT_LINK_STYLE: ResolvedLinkStyle = {
     borderWidth: 1.5,
     borderRadius: 4,
     textColor: 'color-mix(in srgb, #8E42EE, #000000 40%)',
-    fontSize: 12,
+    fontSize: 10,
     paddingX: 8,
     paddingY: 4,
     height: 24,

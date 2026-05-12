@@ -39,7 +39,7 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
     .attr('class', 'link-label')
     /**
      * Managed Visual State:
-     * We avoid 'display: none' to preserve the ability to use D3 transitions 
+     * We use opacity instead of 'display: none' to preserve the ability to use D3 transitions
      * for smooth fading.
      */
     .style('opacity', (item: RenderableLinkLabel): number => {
@@ -48,7 +48,7 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
     })
     /**
      * Managed Interaction State:
-     * When opacity is 0, we must set pointer-events to 'none' so these 
+     * When opacity is 0, we must set pointer-events to 'none' so these
      * "ghost" elements don't block interaction with nodes/links underneath.
      */
     .style('pointer-events', (item: RenderableLinkLabel): string => {

@@ -1,9 +1,25 @@
 import { LegendConfig, LegendItem } from '../contracts/graph-legends.interface';
+import { GraphNode } from '../contracts/graph.types';
 import { getLegendIcon } from './graph-legend-icon';
+
+export function generateLegendItems(nodes: GraphNode[]): LegendItem[] {
+  const uniqueTypes = Array.from(new Set(nodes.map(node => node.type)));
+
+  return uniqueTypes.map((type): LegendItem => {
+    const sampleNode = nodes.find(node => node.type === type);
+
+    return {
+      label: type,
+      color: sampleNode?.style?.fill ?? '#94a3b8',
+      shape: 'circle'
+    };
+  });
+}
 
 export function createGraphLegend(
   overlay: HTMLElement,
-  config: LegendConfig
+  config: LegendConfig,
+  nodes?: GraphNode[]
 ): () => void {
   const legendWrapper = document.createElement('div');
   legendWrapper.className = 'pg-legend';
@@ -35,7 +51,10 @@ export function createGraphLegend(
   const list = document.createElement('ul');
   list.className = 'pg-legend-list';
 
-  config.items.forEach((item: LegendItem) => {
+  // Use provided items or auto-generate from nodes
+  const legendItems = config.items ?? (nodes ? generateLegendItems(nodes) : []);
+
+  legendItems.forEach((item: LegendItem) => {
     const listItem = document.createElement('li');
     listItem.className = 'pg-legend-item';
 

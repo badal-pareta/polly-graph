@@ -2,40 +2,40 @@ import { drag } from 'd3-drag';
 import { Simulation } from 'd3-force';
 import { GraphLink, GraphNode } from '../contracts/graph.types';
 
-export function createDragBehavior(simulation: Simulation<GraphNode, GraphLink>) {
+const DRAG_ALPHA_TARGET = 0.3;
+
+export function createDragBehavior(simulation: Simulation<GraphNode, GraphLink>, onDragStart?: VoidFunction) {
+  let hasActuallyDragged = false;
+
   return drag<SVGCircleElement, GraphNode>()
-    .on('start', (event, d) => {
-      /**
-       * Reheat strongly so
-       * node + label-anchor
-       * collision can resolve
-       * during drag.
-       */
-      if (!event.active) {
-        simulation.alphaTarget(0.8).restart();
+    .on('start', (event, node): void => {
+        hasActuallyDragged = false;
+        // Don't restart simulation immediately - wait for actual drag movement
+        node.fx = node.x;
+        node.fy = node.y;
       }
+    )
+    .on('drag', (event, node): void => {
+        // Only restart simulation on first actual drag movement
+        if (!hasActuallyDragged) {
+          hasActuallyDragged = true;
+          if (!event.active) {
+            simulation.alphaTarget(DRAG_ALPHA_TARGET).restart();
+          }
+          onDragStart?.();
+        }
 
-      d.fx = d.x;
-      d.fy = d.y;
+        node.fx = event.x;
+        node.fy = event.y;
     })
-    .on('drag', (event, d) => {
-      d.fx = event.x;
-      d.fy = event.y;
 
-      /**
-       * Keep simulation alive
-       * while dragging so
-       * midpoint labels can
-       * re-stabilize correctly.
-       */
-      simulation.alpha(0.4).restart();
-    })
-    .on('end', (event, d) => {
-      if (!event.active) {
-        simulation.alphaTarget(0);
-      }
+    .on('end', (event, node): void => {
+        if (hasActuallyDragged && !event.active) {
+          simulation.alphaTarget(0);
+        }
 
-      d.fx = null;
-      d.fy = null;
+        node.fx = null;
+        node.fy = null;
+        hasActuallyDragged = false;
     });
 }

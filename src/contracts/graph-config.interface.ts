@@ -1,6 +1,7 @@
 import { GraphControlsConfig } from './graph-controls.interface';
 import { LegendConfig } from './graph-legends.interface';
 import { GraphNode, GraphLink, NodeStyle, LinkStyle } from './graph.types';
+import { EnhancedSimulationConfig } from './simulation.interface';
 
 export type GraphTooltipTheme = 'dark' | 'light';
 export type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right' | 'auto';
@@ -47,11 +48,7 @@ export interface GraphConfig {
   readonly autoFit?: boolean;
   readonly responsive?: boolean;
 
-  readonly simulation?: {
-    readonly alpha?: number;
-    readonly gravity?: number;
-    readonly linkDistance?: number | ((link: GraphLink) => number);
-  };
+  readonly simulation?: EnhancedSimulationConfig;
 
   readonly interaction?: GraphInteractionConfig;
   readonly controls?: GraphControlsConfig;
