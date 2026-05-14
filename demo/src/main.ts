@@ -85,10 +85,8 @@ async function loadGraph(graphSize: GraphSize): Promise<void> {
   showLoading(true);
 
   // SIMULATE REAL-WORLD SCENARIO: Container starts with no dimensions
-  console.log('📐 Simulating dynamic sizing scenario...');
 
   // Step 1: Collapse container to zero size (simulating modal/tab before shown)
-  console.log('🔻 Collapsing container to zero size...');
   hostContainer.style.width = '0px';
   hostContainer.style.height = '0px';
   hostContainer.style.overflow = 'hidden';
@@ -108,11 +106,6 @@ async function loadGraph(graphSize: GraphSize): Promise<void> {
   }
 
   // Step 2: Create graph with zero-sized container (this should not cause positioning issues)
-  console.log('📊 Creating graph with zero-sized container...');
-  console.log('Container dimensions during creation:', {
-    width: hostContainer.clientWidth,
-    height: hostContainer.clientHeight
-  });
 
   // Create new graph with adaptive simulation
   const renderStartTime = performance.now();
@@ -170,35 +163,23 @@ async function loadGraph(graphSize: GraphSize): Promise<void> {
   });
 
   // Step 3: Render the graph first (with zero-sized container)
-  console.log('🎨 Rendering graph with zero dimensions...');
   currentGraph.render();
 
   // Set up selection event handlers after render (when event emitter is initialized)
-  console.log('About to call setupEventListeners after render...');
   setupEventListeners();
-  console.log('setupEventListeners completed');
 
   // Step 4: Simulate async data loading delay (like API call)
-  console.log('⏳ Simulating data loading delay...');
   await new Promise(resolve => setTimeout(resolve, 500));
 
   // Step 5: Dynamically restore container size (simulating modal shown/tab activated)
-  console.log('🔺 Dynamically restoring container size...');
   hostContainer.style.width = '';
   hostContainer.style.height = '';
   hostContainer.style.overflow = '';
 
-  console.log('Container dimensions after restoration:', {
-    width: hostContainer.clientWidth,
-    height: hostContainer.clientHeight
-  });
-
   // Step 6: Auto-fit view after container resize
-  console.log('🎯 Fitting view to restored container...');
   setTimeout(() => {
     if (currentGraph) {
       currentGraph.fitView();
-      console.log('✅ FitView completed - nodes should be properly centered!');
     }
   }, 300); // Give resize observer time to detect changes
 
@@ -218,56 +199,31 @@ async function loadGraph(graphSize: GraphSize): Promise<void> {
   updatePerformanceDisplay();
 
   showLoading(false);
-
-  console.log(`Loaded ${graphSize} graph:`, {
-    nodes: currentData.nodes.length,
-    links: currentData.links.length,
-    metrics: performanceMetrics
-  });
 }
 
 function setupEventListeners(): void {
   if (!currentGraph) {
-    console.log('No currentGraph in setupEventListeners');
     return;
   }
 
-  console.log('Adding event listeners to graph:', currentGraph);
-  console.log('Graph.on method available:', typeof currentGraph.on);
-
   // Enhanced event listeners to showcase the new selection system
-  console.log('Registering nodeSelect listener...');
   const unsubscribeNode = currentGraph.on('nodeSelect', (node, element) => {
-    console.log('✅ Node selected EVENT FIRED:', {
-      id: node.id,
-      type: node.type,
-      label: node.label,
-      element: element.tagName
-    });
     updateSelectionStatus(`Node: ${node.label || node.id} (${node.type})`);
   });
 
   currentGraph.on('linkSelect', (link, element) => {
     const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
     const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    console.log('🔗 Link selected:', {
-      source: sourceId,
-      target: targetId,
-      label: link.label,
-      element: element.tagName
-    });
     updateSelectionStatus(`Link: ${sourceId} → ${targetId}${link.label ? ` (${link.label})` : ''}`);
   });
 
   currentGraph.on('nodeDeselect', (node) => {
-    console.log('❌ Node deselected:', node.id);
     updateSelectionStatus();
   });
 
   currentGraph.on('linkDeselect', (link) => {
     const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
     const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    console.log('❌ Link deselected:', `${sourceId} → ${targetId}`);
     updateSelectionStatus();
   });
 }
@@ -398,5 +354,4 @@ clearSelectionBtn.addEventListener('click', () => {
 });
 
 // Load initial graph with realistic knowledge graph
-console.log('🚀 Demo starting at:', new Date().toLocaleTimeString());
 loadGraph('knowledge-graph');

@@ -1,6 +1,7 @@
 import { Selection, select, BaseType } from 'd3-selection';
 
 import { GraphManager } from './graph-manager';
+import { GraphSelections } from './render-pipeline';
 import { createDragBehavior } from '../interactions/create-drag-behavior';
 import { createNodeHover } from '../interactions/create-node-hover';
 import { createLinkHover } from '../interactions/create-link-hover';
@@ -29,13 +30,7 @@ export class InteractionManager {
   /**
    * Setup all interactions for the graph
    */
-  setupInteractions(selections: {
-    linkSelection: Selection<SVGLineElement, RenderableGraphLink, BaseType, unknown>;
-    linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, SVGGElement, unknown>;
-    nodeSelection: Selection<SVGCircleElement, GraphNode, BaseType, unknown>;
-    labelSelection: Selection<SVGTextElement, GraphNode, BaseType, unknown>;
-  }): void {
-    console.log('[InteractionManager] Setting up interactions');
+  setupInteractions(selections: GraphSelections): void {
 
     // Setup performance tick manager
     this.setupTickManager(selections);
@@ -52,13 +47,12 @@ export class InteractionManager {
     // Setup link hit areas
     this.setupLinkHitAreas(selections);
 
-    console.log('[InteractionManager] All interactions setup complete');
   }
 
   /**
    * Setup performance tick manager
    */
-  private setupTickManager(selections: any): void {
+  private setupTickManager(selections: GraphSelections): void {
     if (!this.manager.tickManager) {
       this.manager.tickManager = new PerformanceTickManager({
         frameRate: 30,
@@ -78,14 +72,13 @@ export class InteractionManager {
 
     if (this.manager.simulation) {
       this.manager.simulation.on('tick', optimizedTickHandler);
-      console.log('[InteractionManager] Attached optimized tick handler');
     }
   }
 
   /**
    * Setup hover interactions
    */
-  private setupHoverInteractions(selections: any): void {
+  private setupHoverInteractions(selections: GraphSelections): void {
     if (this.manager.config.interaction?.hover?.enabled) {
       // Setup tooltip if enabled
       if (this.manager.config.interaction.hover.tooltip?.enabled) {
@@ -94,34 +87,35 @@ export class InteractionManager {
           selection: selections.nodeSelection,
           tooltipConfig: this.manager.config.interaction.hover.tooltip
         });
-        console.log('[InteractionManager] Setup node tooltips');
       }
 
       // Setup hover styles
       createNodeHover(selections.nodeSelection, this.manager.config.interaction.hover.nodeStyle);
       createLinkHover(selections.linkSelection, this.manager.config.interaction.hover.linkStyle);
-      console.log('[InteractionManager] Setup hover interactions');
     }
   }
 
   /**
    * Setup drag behavior
    */
-  private setupDragBehavior(selections: any): void {
+  private setupDragBehavior(selections: GraphSelections): void {
     if (this.manager.config.interaction?.drag?.enabled !== false && this.manager.simulation) {
       selections.nodeSelection.call(
-        createDragBehavior(this.manager.simulation, () => {
-          this.manager.reheatSimulation(0.3);
-        })
+        createDragBehavior(
+          this.manager.simulation,
+          () => {
+            this.manager.reheatSimulation(0.3);
+          },
+          this.manager.dimensions
+        )
       );
-      console.log('[InteractionManager] Setup drag behavior');
     }
   }
 
   /**
    * Setup selection management
    */
-  private setupSelectionManagement(selections: any): void {
+  private setupSelectionManagement(selections: GraphSelections): void {
     if (this.manager.config.interaction?.selection?.enabled &&
         this.manager.eventEmitter &&
         this.manager.layers &&
@@ -153,30 +147,63 @@ export class InteractionManager {
 
       // Setup selection event handlers
       this.setupSelectionHandlers(selections);
-      console.log('[InteractionManager] Setup selection management');
+
+      // Setup background click to clear selection
+      this.setupBackgroundClickHandler();
+
     }
   }
 
   /**
    * Setup selection event handlers
    */
-  private setupSelectionHandlers(selections: any): void {
+  private setupSelectionHandlers(selections: GraphSelections): void {
     if (!this.manager.selectionManager) return;
 
     // Node selection
-    selections.nodeSelection.on('click.select', (event: MouseEvent, node: any) => {
+    selections.nodeSelection.on('click.select', (event: MouseEvent, node: GraphNode) => {
       const nodeElement = event.currentTarget as SVGCircleElement;
       this.manager.selectionManager?.selectNode(nodeElement, node);
     });
 
-    // Link selection will be handled by hit areas
-    console.log('[InteractionManager] Setup selection handlers');
+    // Link label selection - both text and background should be clickable
+    selections.linkLabelSelection.on('click.select', (event: MouseEvent, renderableLinkLabel: RenderableLinkLabel) => {
+      event.stopPropagation();
+
+      // Find the corresponding visible link element for this label
+      const correspondingLink = selections.linkSelection.filter((d: RenderableGraphLink) => d.link === renderableLinkLabel.link).node();
+      if (correspondingLink && this.manager.selectionManager) {
+        const linkData = selections.linkSelection.filter((d: RenderableGraphLink) => d.link === renderableLinkLabel.link).datum();
+        this.manager.selectionManager.selectLink(correspondingLink, linkData, event);
+      }
+    });
+
+    // Link selection will also be handled by hit areas for broader click area
+  }
+
+  /**
+   * Setup background click to clear selection
+   */
+  private setupBackgroundClickHandler(): void {
+    if (!this.manager.selectionManager || !this.manager.layers) return;
+
+    // Add click listener to SVG root to handle background clicks
+    select(this.manager.layers.svg).on('click.deselect', (event: MouseEvent) => {
+      if (this.manager.selectionManager) {
+        this.manager.selectionManager.handleBackgroundClick(
+          event,
+          this.manager.layers!.svg,
+          this.manager.layers!.interactionRect
+        );
+      }
+    });
+
   }
 
   /**
    * Setup link hit areas for better interaction
    */
-  private setupLinkHitAreas(selections: any): void {
+  private setupLinkHitAreas(selections: GraphSelections): void {
     if (!this.manager.rootGroup) {
       console.warn('[InteractionManager] No root group available for link hit areas');
       return;
@@ -212,7 +239,6 @@ export class InteractionManager {
         });
       }
 
-      console.log('[InteractionManager] Setup link hit areas');
     }
   }
 }

@@ -18,7 +18,7 @@ import { GraphValidator, GraphValidationError } from './utils/validation';
 // Types
 import { GraphConfig, NodeSelectHandler, LinkSelectHandler } from './contracts/graph-config.interface';
 import { GraphInstance } from './contracts/graph-instance.interface';
-import { GraphNode, GraphLink } from './contracts/graph.types';
+import { GraphNode, GraphLink, GraphNodeWithInitial } from './contracts/graph.types';
 import { GraphEventMap } from './utils/event-emitter';
 
 /**
@@ -66,7 +66,12 @@ export function createGraph(config: GraphConfig): GraphInstance {
         // Setup additional components
         setupAdditionalComponents();
 
-        console.log('[Polly Graph] Graph rendered successfully');
+        // Check if we need immediate fitView after initial positioning
+        if (graphManager.needsImmediateFitView) {
+          graphManager.needsImmediateFitView = false;
+          fitViewWithInitialPositions();
+        }
+
       }).catch(error => {
         console.error('[Polly Graph] Render failed:', error);
       });
@@ -85,7 +90,6 @@ export function createGraph(config: GraphConfig): GraphInstance {
         config.controls
       );
       graphManager.controls.mount();
-      console.log('[Polly Graph] Setup controls');
     }
 
     // Setup legend if enabled
@@ -96,7 +100,6 @@ export function createGraph(config: GraphConfig): GraphInstance {
         config.nodes
       );
       graphManager.addCleanup(legendCleanup);
-      console.log('[Polly Graph] Setup legend');
     }
 
     // Setup visibility handler
@@ -164,6 +167,7 @@ export function createGraph(config: GraphConfig): GraphInstance {
   }
 
   function fitView(): void {
+
     if (!graphManager.simulation || !graphManager.svgElement) {
       console.warn('[Polly Graph] Cannot fit view: simulation or SVG not available');
       return;
@@ -180,8 +184,14 @@ export function createGraph(config: GraphConfig): GraphInstance {
       y: node.y ?? 0
     }));
 
+
+    nodes.forEach(n => {
+      const nodeRadius = 12;
+    });
+
     const xExtent = extent(positions, (d: {x: number, y: number}) => d.x) as [number, number];
     const yExtent = extent(positions, (d: {x: number, y: number}) => d.y) as [number, number];
+
 
     const padding = 50;
     const width = graphManager.dimensions.width - padding * 2;
@@ -190,11 +200,72 @@ export function createGraph(config: GraphConfig): GraphInstance {
     const nodeWidth = xExtent[1] - xExtent[0];
     const nodeHeight = yExtent[1] - yExtent[0];
 
-    if (nodeWidth === 0 || nodeHeight === 0) return;
+    if (nodeWidth === 0 || nodeHeight === 0) {
+      return;
+    }
 
     const scale = Math.min(width / nodeWidth, height / nodeHeight, 3); // Max scale of 3x
     const centerX = (xExtent[0] + xExtent[1]) / 2;
     const centerY = (yExtent[0] + yExtent[1]) / 2;
+
+
+    const transform = zoomIdentity
+      .translate(graphManager.dimensions.width / 2, graphManager.dimensions.height / 2)
+      .scale(scale)
+      .translate(-centerX, -centerY);
+
+    if (graphManager.zoomBehavior) {
+      select(svg)
+        .transition()
+        .duration(400)
+        .call(graphManager.zoomBehavior.transform, transform);
+    }
+  }
+
+  function fitViewWithInitialPositions(): void {
+
+    if (!graphManager.simulation || !graphManager.svgElement) {
+      console.warn('[Polly Graph] Cannot fit view: simulation or SVG not available');
+      return;
+    }
+
+    const svg = graphManager.svgElement;
+    const nodes = config.nodes;
+
+    if (nodes.length === 0) return;
+
+    // Use stored initial positions instead of current positions
+    const positions = nodes.map((node: GraphNodeWithInitial) => ({
+      x: node.initialX ?? node.x ?? 0,
+      y: node.initialY ?? node.y ?? 0
+    }));
+
+
+    nodes.forEach((n: GraphNodeWithInitial) => {
+      const initialX = n.initialX ?? n.x ?? 0;
+      const initialY = n.initialY ?? n.y ?? 0;
+      const nodeRadius = 12;
+    });
+
+    const xExtent = extent(positions, (d: {x: number, y: number}) => d.x) as [number, number];
+    const yExtent = extent(positions, (d: {x: number, y: number}) => d.y) as [number, number];
+
+
+    const padding = 50;
+    const width = graphManager.dimensions.width - padding * 2;
+    const height = graphManager.dimensions.height - padding * 2;
+
+    const nodeWidth = xExtent[1] - xExtent[0];
+    const nodeHeight = yExtent[1] - yExtent[0];
+
+    if (nodeWidth === 0 || nodeHeight === 0) {
+      return;
+    }
+
+    const scale = Math.min(width / nodeWidth, height / nodeHeight, 3); // Max scale of 3x
+    const centerX = (xExtent[0] + xExtent[1]) / 2;
+    const centerY = (yExtent[0] + yExtent[1]) / 2;
+
 
     const transform = zoomIdentity
       .translate(graphManager.dimensions.width / 2, graphManager.dimensions.height / 2)
@@ -272,7 +343,9 @@ export function createGraph(config: GraphConfig): GraphInstance {
   // === 10. PUBLIC API ===
 
   // Set fitView callback so render pipeline can call it on resize
-  graphManager.fitViewCallback = fitView;
+  graphManager.fitViewCallback = () => {
+    fitView();
+  };
 
   return {
     render,

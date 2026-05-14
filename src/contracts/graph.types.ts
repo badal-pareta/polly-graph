@@ -8,6 +8,11 @@ export interface GraphNode extends SimulationNodeDatum {
   readonly style?: NodeStyle;
 }
 
+export interface GraphNodeWithInitial extends GraphNode {
+  initialX?: number;
+  initialY?: number;
+}
+
 export interface GraphLink extends SimulationLinkDatum<GraphNode> {
   readonly source: string | GraphNode;
   readonly target: string | GraphNode;

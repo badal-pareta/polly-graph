@@ -33,26 +33,59 @@ export function createGraphLayers(host: HTMLElement): GraphLayers {
 
   const graphRoot = createGroup('viewport');
   
+  // Create hover layer with sub-layers
+  const hoverLayerContainer = createGroup('hover-layer');
+  const hoverLinks = createGroup('hover-links');
+  const hoverNodes = createGroup('hover-nodes');
+  const hoverNodeLabels = createGroup('hover-node-labels');
+  const hoverLinkLabels = createGroup('hover-link-labels');
+  hoverLayerContainer.append(hoverLinks, hoverNodes, hoverNodeLabels, hoverLinkLabels);
+
+  // Create selection layer with sub-layers
+  const selectionLayerContainer = createGroup('selection-layer');
+  const selectionLinks = createGroup('selection-links');
+  const selectionNodes = createGroup('selection-nodes');
+  const selectionNodeLabels = createGroup('selection-node-labels');
+  const selectionLinkLabels = createGroup('selection-link-labels');
+  selectionLayerContainer.append(selectionNodes, selectionLinks, selectionNodeLabels, selectionLinkLabels);
+
   const layers: GraphLayers = {
     svg,
     overlay,
     interactionLayer,
     interactionRect,
     root: graphRoot,
-    // These keys now match your ctx.root.select('[data-layer="..."]') calls
+    // Base graph layers
     links: createGroup('links'),
-    linkLabels: createGroup('link-labels'),
     nodeRings: createGroup('node-rings'),
     nodes: createGroup('nodes'),
     nodeLabels: createGroup('node-labels'),
+    linkLabels: createGroup('link-labels'),
+    // Dedicated interaction state layers with proper sub-layering
+    hoverLayer: {
+      container: hoverLayerContainer,
+      links: hoverLinks,
+      nodes: hoverNodes,
+      nodeLabels: hoverNodeLabels,
+      linkLabels: hoverLinkLabels
+    },
+    selectionLayer: {
+      container: selectionLayerContainer,
+      links: selectionLinks,
+      nodes: selectionNodes,
+      nodeLabels: selectionNodeLabels,
+      linkLabels: selectionLinkLabels
+    }
   };
 
   graphRoot.append(
     layers.links,
-    layers.linkLabels,
     layers.nodeRings,
     layers.nodes,
     layers.nodeLabels,
+    layers.linkLabels,
+    layers.hoverLayer.container,     // Hover elements on top
+    layers.selectionLayer.container, // Selected elements at very top
   );
 
   svg.appendChild(interactionLayer);

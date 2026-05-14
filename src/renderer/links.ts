@@ -10,6 +10,34 @@ export interface RenderableGraphLink {
   readonly markerEnd: string;
 }
 
+export function getShortenedSourcePoint(link: GraphLink, style: ResolvedLinkStyle): { x: number; y: number } {
+  const source: GraphNode = link.source as GraphNode;
+  const target: GraphNode = link.target as GraphNode;
+
+  const sourceX: number = source.x ?? 0;
+  const sourceY: number = source.y ?? 0;
+  const targetX: number = target.x ?? 0;
+  const targetY: number = target.y ?? 0;
+
+  const dx: number = targetX - sourceX;
+  const dy: number = targetY - sourceY;
+
+  const distance: number = Math.sqrt(dx * dx + dy * dy) || 1;
+  const sourceRadius: number = source.style?.radius ?? 12;
+  const sourceStrokeWidth: number = source.style?.strokeWidth ?? 1.5;
+
+  // Calculate offset from source node edge including ring/stroke
+  const linkStrokeCompensation: number = style.strokeWidth / 2;
+  const nodeStrokeOffset: number = sourceStrokeWidth / 2;
+  const visualSpacing: number = 2;
+  const offset: number = sourceRadius + nodeStrokeOffset + linkStrokeCompensation + visualSpacing;
+
+  return {
+    x: sourceX + (dx / distance) * offset,
+    y: sourceY + (dy / distance) * offset,
+  };
+}
+
 export function getShortenedTargetPoint(link: GraphLink, style: ResolvedLinkStyle): { x: number; y: number } {
   const source: GraphNode = link.source as GraphNode;
   const target: GraphNode = link.target as GraphNode;
@@ -24,11 +52,13 @@ export function getShortenedTargetPoint(link: GraphLink, style: ResolvedLinkStyl
 
   const distance: number = Math.sqrt(dx * dx + dy * dy) || 1;
   const targetRadius: number = target.style?.radius ?? 12;
+  const targetStrokeWidth: number = target.style?.strokeWidth ?? 1.5;
 
   const arrowLength: number = style.arrow.enabled ? style.arrow.size * 2 : 0;
-  const strokeCompensation: number = style.strokeWidth / 2;
+  const linkStrokeCompensation: number = style.strokeWidth / 2;
+  const nodeStrokeOffset: number = targetStrokeWidth / 2;
   const visualSpacing: number = 2;
-  const offset: number = targetRadius + arrowLength + strokeCompensation + visualSpacing;
+  const offset: number = targetRadius + nodeStrokeOffset + arrowLength + linkStrokeCompensation + visualSpacing;
 
   return {
     x: targetX - (dx / distance) * offset,

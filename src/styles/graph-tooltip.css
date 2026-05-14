@@ -2,7 +2,7 @@
   position: absolute;
   pointer-events: none;
   z-index: 1000;
-  min-width: 160px;
+  width: fit-content;
   max-width: 280px;
   border-radius: 10px;
   background: #0f172a;
@@ -26,6 +26,8 @@
   position: relative;
   z-index: 2;
   padding: 10px 14px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .graph-tooltip__arrow {
@@ -96,4 +98,6 @@
   font-weight: 600;
   line-height: 1.4;
   color: #ffffff;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }

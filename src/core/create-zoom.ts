@@ -11,7 +11,7 @@ import {
 export function createZoom({
   svg,
   root,
-  scaleExtent = [0.2, 3],
+  scaleExtent = [0.01, 10],
 }: ZoomConfig): ZoomResult {
   const svgSelection =
     select<SVGSVGElement, unknown>(svg);

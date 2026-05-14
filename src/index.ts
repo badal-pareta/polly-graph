@@ -1,7 +1,7 @@
 import './styles/main.css';
-
 export { createGraph } from './create-graph';
 export type { GraphConfig, GraphInteractionConfig } from './contracts/graph-config.interface';
+export type { LegendConfig } from './contracts/graph-legends.interface';
 export type { GraphControlsConfig } from './contracts/graph-controls.interface';
 export type { GraphInstance } from './contracts/graph-instance.interface';
 export type { GraphNode, GraphLink } from './contracts/graph.types';

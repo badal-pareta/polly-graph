@@ -5,10 +5,9 @@
 
 import { Selection } from 'd3-selection';
 import { GraphNode, GraphLink } from '../contracts/graph.types';
-import { RenderableGraphLink } from '../renderer/links';
+import { RenderableGraphLink, getShortenedSourcePoint, getShortenedTargetPoint } from '../renderer/links';
 import { RenderableLinkLabel } from '../renderer/link-labels';
 import { getLinkTargetPoint } from './get-link-target-point';
-import { getShortenedTargetPoint } from './link-calculations';
 
 interface TickManagerConfig {
   readonly frameRate?: number; // Target FPS (default: 30)
@@ -93,12 +92,12 @@ export class PerformanceTickManager {
   }
 
   /**
-   * Fast link position updates - no DOM measurements
+   * Fast link position updates - now with proper source and target offsets
    */
   private updateLinkPositions(linkSelection: Selection<SVGLineElement, RenderableGraphLink, any, unknown>): void {
     linkSelection
-      .attr('x1', (item: RenderableGraphLink): number => (item.link.source as GraphNode).x ?? 0)
-      .attr('y1', (item: RenderableGraphLink): number => (item.link.source as GraphNode).y ?? 0)
+      .attr('x1', (item: RenderableGraphLink): number => getShortenedSourcePoint(item.link, item.style).x)
+      .attr('y1', (item: RenderableGraphLink): number => getShortenedSourcePoint(item.link, item.style).y)
       .attr('x2', (item: RenderableGraphLink): number => getShortenedTargetPoint(item.link, item.style).x)
       .attr('y2', (item: RenderableGraphLink): number => getShortenedTargetPoint(item.link, item.style).y);
   }

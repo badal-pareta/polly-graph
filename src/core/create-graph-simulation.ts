@@ -11,7 +11,8 @@ import {
 
 import {
   GraphLink,
-  GraphNode
+  GraphNode,
+  GraphNodeWithInitial
 } from '../contracts/graph.types';
 
 import {
@@ -33,43 +34,43 @@ interface AdaptiveDefaults {
 }
 
 function getAdaptiveDefaults(nodeCount: number): AdaptiveDefaults {
-
+  // Updated to match reference simulation values
   if (nodeCount < 50) {
     return {
       alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 300),
+      alphaDecay: 0.05,
       alphaMin: 0.001,
-      velocityDecay: 0.3,
+      velocityDecay: 0.6,
       forces: {
-        link: { strength: 0.8, distance: 140 }, // Increased for label space
-        charge: { strength: -200 },
-        center: { strength: 0.03 },
+        link: { strength: 0.5, distance: 200 },
+        charge: { strength: -500 },
+        center: { strength: 0.05 },
         collide: { strength: 0.8, iterations: 1 }
       }
     };
   } else if (nodeCount < 200) {
     return {
       alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 250),
+      alphaDecay: 0.05,
       alphaMin: 0.001,
-      velocityDecay: 0.3,
+      velocityDecay: 0.6,
       forces: {
-        link: { strength: 0.5, distance: 160 }, // Increased for label space
-        charge: { strength: -180 },
-        center: { strength: 0.02 },
+        link: { strength: 0.5, distance: 200 },
+        charge: { strength: -500 },
+        center: { strength: 0.05 },
         collide: { strength: 0.7, iterations: 1 }
       }
     };
   } else {
     return {
       alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 300),
+      alphaDecay: 0.05,
       alphaMin: 0.001,
-      velocityDecay: 0.4,
+      velocityDecay: 0.6,
       forces: {
-        link: { strength: 0.3, distance: 180 }, // Increased for label space
-        charge: { strength: -120 },
-        center: { strength: 0.01 },
+        link: { strength: 0.5, distance: 200 },
+        charge: { strength: -500 },
+        center: { strength: 0.05 },
         collide: { strength: 0.6, iterations: 1 }
       }
     };
@@ -85,6 +86,12 @@ function warmupSimulation(simulation: Simulation<GraphNode, GraphLink>, ticks: n
 export function createGraphSimulation(
   config: SimulationConfig
 ): SimulationResult {
+  //   nodeCount: config.nodes.length,
+  //   linkCount: config.links.length,
+  //   dimensions: { width: config.width, height: config.height },
+  //   nodes: config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y }))
+  // });
+
   const centerX: number = config.width / 2;
   const centerY: number = config.height / 2;
 
@@ -99,9 +106,9 @@ export function createGraphSimulation(
   seedNodePositions(config.nodes, config.width, config.height);
 
   const alpha = enhancedConfig.alpha ?? (useAdaptive ? adaptiveDefaults.alpha : 1);
-  const alphaDecay = enhancedConfig.alphaDecay ?? (useAdaptive ? adaptiveDefaults.alphaDecay : 0.0228);
+  const alphaDecay = enhancedConfig.alphaDecay ?? (useAdaptive ? adaptiveDefaults.alphaDecay : 0.05);
   const alphaMin = enhancedConfig.alphaMin ?? (useAdaptive ? adaptiveDefaults.alphaMin : 0.001);
-  const velocityDecay = enhancedConfig.velocityDecay ?? (useAdaptive ? adaptiveDefaults.velocityDecay : 0.4);
+  const velocityDecay = enhancedConfig.velocityDecay ?? (useAdaptive ? adaptiveDefaults.velocityDecay : 0.6);
 
   const simulation: Simulation<GraphNode, GraphLink> = forceSimulation<GraphNode>(config.nodes)
     .alpha(alpha)
@@ -111,9 +118,9 @@ export function createGraphSimulation(
 
   if (forces.link?.enabled !== false) {
     const linkDistance = forces.link?.distance ??
-      (useAdaptive ? adaptiveDefaults.forces.link.distance : calculateLinkDistance);
+      (useAdaptive ? adaptiveDefaults.forces.link.distance : 200);
     const linkStrength = forces.link?.strength ??
-      (useAdaptive ? adaptiveDefaults.forces.link.strength : 0.15);
+      (useAdaptive ? adaptiveDefaults.forces.link.strength : 0.5);
 
     simulation.force('link',
       forceLink<GraphNode, GraphLink>(config.links)
@@ -126,7 +133,7 @@ export function createGraphSimulation(
 
   if (forces.charge?.enabled !== false) {
     const chargeStrength = forces.charge?.strength ??
-      (useAdaptive ? adaptiveDefaults.forces.charge.strength : -250);
+      (useAdaptive ? adaptiveDefaults.forces.charge.strength : -500);
 
     const chargeForce = forceManyBody()
       .theta(forces.charge?.theta ?? 0.9)
@@ -162,7 +169,7 @@ export function createGraphSimulation(
 
   if (forces.center?.enabled !== false) {
     const centerStrength = forces.center?.strength ??
-      (useAdaptive ? adaptiveDefaults.forces.center.strength : 1);
+      (useAdaptive ? adaptiveDefaults.forces.center.strength : 0.05);
 
     simulation.force('center',
       forceCenter(
@@ -172,9 +179,10 @@ export function createGraphSimulation(
     );
   }
 
-  if (forces.x?.enabled) {
-    const xForce = forceX().strength(forces.x.strength ?? 0.1);
-    const xPosition = forces.x.x;
+  // Enable X and Y forces by default to match reference simulation
+  if (forces.x?.enabled !== false) {
+    const xForce = forceX().strength(forces.x?.strength ?? 0.05);
+    const xPosition = forces.x?.x;
     if (typeof xPosition === 'function') {
       xForce.x((d, _i) => xPosition(d as GraphNode));
     } else {
@@ -183,9 +191,9 @@ export function createGraphSimulation(
     simulation.force('x', xForce);
   }
 
-  if (forces.y?.enabled) {
-    const yForce = forceY().strength(forces.y.strength ?? 0.1);
-    const yPosition = forces.y.y;
+  if (forces.y?.enabled !== false) {
+    const yForce = forceY().strength(forces.y?.strength ?? 0.05);
+    const yPosition = forces.y?.y;
     if (typeof yPosition === 'function') {
       yForce.y((d, _i) => yPosition(d as GraphNode));
     } else {
@@ -223,14 +231,41 @@ function seedNodePositions(
   containerHeight: number
 ): void {
 
+  //   nodeCount: nodes.length,
+  //   containerWidth,
+  //   containerHeight,
+  //   nodesBefore: nodes.map(n => ({ id: n.id, x: n.x, y: n.y }))
+  // });
+
+
   // Validate container dimensions - if invalid, defer positioning
   if (containerWidth <= 0 || containerHeight <= 0) {
+    console.warn('🚫 [seedNodePositions] Invalid container dimensions, skipping positioning');
     return;
   }
 
   const centerX = containerWidth / 2;
   const centerY = containerHeight / 2;
-  const seedRadius: number = Math.min(200, Math.max(50, nodes.length * 2));
+
+  // Calculate radius that keeps nodes within container bounds with padding
+  const padding = 50;
+  const maxRadius = Math.min(
+    (containerWidth - padding * 2) / 2,
+    (containerHeight - padding * 2) / 2
+  );
+  const nodeBasedRadius = Math.max(50, Math.min(200, nodes.length * 3));
+  const seedRadius = Math.min(maxRadius, nodeBasedRadius);
+
+
+  //   containerWidth,
+  //   containerHeight,
+  //   centerX,
+  //   centerY,
+  //   maxRadius,
+  //   nodeBasedRadius,
+  //   seedRadius,
+  //   padding
+  // });
 
   nodes.forEach(
     (
@@ -238,9 +273,14 @@ function seedNodePositions(
       index: number
     ): void => {
 
+      // Only position nodes that don't have valid positions
       if (
         node.x != null
         && node.y != null
+        && !isNaN(node.x)
+        && !isNaN(node.y)
+        && isFinite(node.x)
+        && isFinite(node.y)
       ) {
         return;
       }
@@ -252,12 +292,28 @@ function seedNodePositions(
 
       const radius: number = seedRadius * (0.3 + Math.random() * 0.7);
 
-      node.x = centerX + Math.cos(angle) * radius;
-      node.y = centerY + Math.sin(angle) * radius;
+      // Calculate position
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+
+      // Ensure nodes stay within container bounds
+      const nodeRadius = 12; // Default node radius
+      const clampedX = Math.max(nodeRadius, Math.min(containerWidth - nodeRadius, x));
+      const clampedY = Math.max(nodeRadius, Math.min(containerHeight - nodeRadius, y));
+
+      node.x = clampedX;
+      node.y = clampedY;
+
 
     }
   );
 
+
+  // Store initial positions before simulation can move them
+  nodes.forEach((node: GraphNodeWithInitial) => {
+    node.initialX = node.x;
+    node.initialY = node.y;
+  });
 }
 
 function calculateLinkDistance(

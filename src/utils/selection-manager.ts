@@ -54,8 +54,14 @@ export class SelectionManager {
    * Select a node, automatically deselecting any current selection
    */
   selectNode(nodeElement: SVGCircleElement, nodeData: GraphNode): void {
+    // Clear hover state first to prevent layer conflicts
+    this.clearHoverState();
+
     // Clear any existing selections
     this.clearSelection();
+
+    // Bring node and related elements to front
+    this.bringNodeToFront(nodeElement, nodeData);
 
     // Apply node selection styles
     if (this.config.nodeStyle) {
@@ -87,7 +93,6 @@ export class SelectionManager {
     this.state.selectedNode = { element: nodeElement, data: nodeData };
 
     // Emit event
-    console.log('SelectionManager: Emitting nodeSelect event for:', nodeData);
     this.eventEmitter.emit('nodeSelect', { node: nodeData, element: nodeElement });
   }
 
@@ -105,6 +110,9 @@ export class SelectionManager {
 
     // Clear any existing selections
     this.clearSelection();
+
+    // Bring link to front
+    this.bringLinkToFront(linkElement, renderableLink);
 
     // Mark element as selected for hover logic
     linkElement.dataset.selected = 'true';
@@ -160,12 +168,18 @@ export class SelectionManager {
 
     const { element, data } = this.state.selectedNode;
 
+    // Restore elements to their original layers
+    this.restoreSelectedElements(data);
+
     // Reset styles
     element.style.fill = '';
     element.style.stroke = '';
     element.style.strokeWidth = '';
     element.style.opacity = '';
     element.style.removeProperty('r');
+
+    // Clear selected marker
+    delete element.dataset.selected;
 
     // Hide pinned link labels
     this.root
@@ -191,6 +205,20 @@ export class SelectionManager {
     if (!this.state.selectedLink) return;
 
     const { element, data, originalMarker } = this.state.selectedLink;
+
+    // Restore link to original layer
+    this.layers.links.appendChild(element);
+
+    // Also restore corresponding link label to original layer
+    this.root
+      .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
+      .filter((item: RenderableLinkLabel): boolean => item.link === data)
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.linkLabels.appendChild(element);
+        }
+      });
 
     // Remove selected marker
     delete element.dataset.selected;
@@ -269,6 +297,206 @@ export class SelectionManager {
   handleBackgroundClick(event: MouseEvent, svg: SVGSVGElement, interactionRect: SVGRectElement): void {
     if (event.target !== svg && event.target !== interactionRect) return;
     this.clearSelection();
+  }
+
+  /**
+   * Bring node and related elements to front using selection layer sub-layers
+   */
+  private bringNodeToFront(nodeElement: SVGCircleElement, nodeData: GraphNode): void {
+
+    // Move the node itself to selection nodes sub-layer
+    this.layers.selectionLayer.nodes.appendChild(nodeElement);
+
+    // Mark node as selected to prevent hover interference
+    nodeElement.dataset.selected = 'true';
+
+    // Move related links to selection links sub-layer (using same selector as hover)
+    const connectedLinks = this.root
+      .selectAll<SVGLineElement, RenderableGraphLink>('line:not(.link-hit-area)')
+      .filter((d: RenderableGraphLink): boolean => {
+        const source = d.link.source as GraphNode;
+        const target = d.link.target as GraphNode;
+        return source.id === nodeData.id || target.id === nodeData.id;
+      });
+
+    connectedLinks.each((d, i, nodes) => {
+      const element = nodes[i];
+      if (element) {
+        this.layers.selectionLayer.links.appendChild(element);
+      }
+    });
+
+    // Move node label to selection node labels sub-layer
+    this.root
+      .selectAll<SVGTextElement, GraphNode>('text')
+      .filter((d: GraphNode): boolean => d.id === nodeData.id)
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.selectionLayer.nodeLabels.appendChild(element);
+        }
+      });
+
+    // Move related link labels to selection link labels sub-layer
+    this.root
+      .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
+      .filter((item: RenderableLinkLabel): boolean => {
+        const source = item.link.source as GraphNode;
+        const target = item.link.target as GraphNode;
+        return source.id === nodeData.id || target.id === nodeData.id;
+      })
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.selectionLayer.linkLabels.appendChild(element);
+        }
+      });
+  }
+
+  /**
+   * Bring link and its label to front using selection layer
+   */
+  private bringLinkToFront(linkElement: SVGLineElement, renderableLink: RenderableGraphLink): void {
+    // Move link to selection layer
+    this.layers.selectionLayer.links.appendChild(linkElement);
+
+    // Also move corresponding link label to selection layer
+    this.root
+      .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
+      .filter((item: RenderableLinkLabel): boolean => item.link === renderableLink.link)
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.selectionLayer.linkLabels.appendChild(element);
+        }
+      });
+  }
+
+  /**
+   * Restore elements back to their original layers
+   */
+  private restoreSelectedElements(nodeData: GraphNode): void {
+    // Move node back to nodes layer
+    this.root.selectAll<SVGCircleElement, GraphNode>('circle')
+      .filter((d: GraphNode) => d.id === nodeData.id)
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.nodes.appendChild(element);
+        }
+      });
+
+    // Move related links back to links layer
+    this.root.selectAll<SVGLineElement, RenderableGraphLink>('line')
+      .filter((d: RenderableGraphLink): boolean => {
+        const source = d.link.source as GraphNode;
+        const target = d.link.target as GraphNode;
+        return source.id === nodeData.id || target.id === nodeData.id;
+      })
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.links.appendChild(element);
+        }
+      });
+
+    // Move node labels back to nodeLabels layer
+    this.root.selectAll<SVGTextElement, GraphNode>('text')
+      .filter((d: GraphNode): boolean => d.id === nodeData.id)
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.nodeLabels.appendChild(element);
+        }
+      });
+
+    // Move link labels back to linkLabels layer
+    this.root.selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
+      .filter((item: RenderableLinkLabel): boolean => {
+        const source = item.link.source as GraphNode;
+        const target = item.link.target as GraphNode;
+        return source.id === nodeData.id || target.id === nodeData.id;
+      })
+      .each((d, i, nodes) => {
+        const element = nodes[i];
+        if (element) {
+          this.layers.linkLabels.appendChild(element);
+        }
+      });
+  }
+
+
+  /**
+   * Utility method to bring any SVG element to front using appendChild
+   * Based on the reference implementation pattern
+   */
+  private bringElementToFront(element: Element): void {
+    if (element.parentNode) {
+      element.parentNode.appendChild(element);
+    }
+  }
+
+  /**
+   * Clear hover state to prevent conflicts with selection
+   * Similar to the clearAllHoverLayers function in create-node-hover.ts
+   */
+  private clearHoverState(): void {
+
+    // Move all nodes back to base nodes layer
+    const hoverNodesLayer = this.root.select('[data-layer="hover-nodes"]').node() as SVGGElement;
+    const nodesLayer = this.root.select('[data-layer="nodes"]').node() as SVGGElement;
+    if (hoverNodesLayer && nodesLayer) {
+      while (hoverNodesLayer.firstChild) {
+        nodesLayer.appendChild(hoverNodesLayer.firstChild);
+      }
+    }
+
+    // Move all node labels back to base node labels layer
+    const hoverNodeLabelsLayer = this.root.select('[data-layer="hover-node-labels"]').node() as SVGGElement;
+    const nodeLabelsLayer = this.root.select('[data-layer="node-labels"]').node() as SVGGElement;
+    if (hoverNodeLabelsLayer && nodeLabelsLayer) {
+      while (hoverNodeLabelsLayer.firstChild) {
+        nodeLabelsLayer.appendChild(hoverNodeLabelsLayer.firstChild);
+      }
+    }
+
+    // Move all links back to base links layer and trigger unhover
+    const hoverLinksLayer = this.root.select('[data-layer="hover-links"]').node() as SVGGElement;
+    const linksLayer = this.root.select('[data-layer="links"]').node() as SVGGElement;
+    if (hoverLinksLayer && linksLayer) {
+      while (hoverLinksLayer.firstChild) {
+        const linkElement = hoverLinksLayer.firstChild as SVGLineElement;
+        linksLayer.appendChild(linkElement);
+
+        // Trigger unhover event
+        const event = new MouseEvent('mouseleave', {
+          bubbles: true,
+          cancelable: false,
+          view: window
+        });
+        linkElement.dispatchEvent(event);
+      }
+    }
+
+    // Move all link labels back to base link labels layer and reset opacity
+    const hoverLinkLabelsLayer = this.root.select('[data-layer="hover-link-labels"]').node() as SVGGElement;
+    const linkLabelsLayer = this.root.select('[data-layer="link-labels"]').node() as SVGGElement;
+    if (hoverLinkLabelsLayer && linkLabelsLayer) {
+      while (hoverLinkLabelsLayer.firstChild) {
+        const labelElement = hoverLinkLabelsLayer.firstChild as SVGGElement;
+
+        // Reset opacity for hover-only labels before moving
+        const labelData = (labelElement as any).__data__ as RenderableLinkLabel;
+        if (labelData && labelData.style.label.visibility === 'hover' &&
+            !labelElement.classList.contains('label-selection-pinned')) {
+          labelElement.style.opacity = '0';
+          labelElement.style.pointerEvents = 'none';
+        }
+
+        linkLabelsLayer.appendChild(labelElement);
+      }
+    }
+
   }
 
   /**

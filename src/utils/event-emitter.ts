@@ -44,12 +44,10 @@ export class GraphEventEmitter<TEventMap extends Record<string, unknown>> {
     listener: EventListener<TEventMap[TEvent]>,
     namespace?: string
   ): EventUnsubscribe {
-    console.log('EventEmitter: on() called for event:', event);
     if (this.isDestroyed) {
       if (this.options.enableWarnings) {
         console.warn('[GraphEventEmitter] Cannot add listener to destroyed emitter');
       }
-      console.log('EventEmitter: destroyed, ignoring on()');
       return () => {};
     }
 
@@ -62,12 +60,10 @@ export class GraphEventEmitter<TEventMap extends Record<string, unknown>> {
 
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
-      console.log('EventEmitter: created new listener array for event:', event);
     }
 
     const eventListeners = this.listeners.get(event)!;
     eventListeners.push(handler as EventHandler<TEventMap[keyof TEventMap]>);
-    console.log('EventEmitter: added listener for event:', event, 'total listeners:', eventListeners.length);
 
     // Warn about potential memory leaks
     if (eventListeners.length > this.options.maxListeners && this.options.enableWarnings) {
@@ -184,16 +180,12 @@ export class GraphEventEmitter<TEventMap extends Record<string, unknown>> {
    * Emit an event to all listeners
    */
   emit<TEvent extends keyof TEventMap>(event: TEvent, data: TEventMap[TEvent], element?: Element): boolean {
-    console.log('EventEmitter: emit called for event:', event, 'data:', data);
     if (this.isDestroyed) {
-      console.log('EventEmitter: destroyed, ignoring event');
       return false;
     }
 
     const eventListeners = this.listeners.get(event);
-    console.log('EventEmitter: found listeners for', event, ':', eventListeners?.length || 0);
     if (!eventListeners || eventListeners.length === 0) {
-      console.log('EventEmitter: no listeners for event:', event);
       return false;
     }
 
@@ -202,7 +194,6 @@ export class GraphEventEmitter<TEventMap extends Record<string, unknown>> {
 
     for (const handler of listenersToCall) {
       try {
-        console.log('EventEmitter: calling listener for', event);
         handler.listener(data, element);
       } catch (error) {
         if (this.options.enableWarnings) {

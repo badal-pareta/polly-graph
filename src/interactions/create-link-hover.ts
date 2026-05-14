@@ -69,6 +69,9 @@ export function createLinkHover(
     .on('mouseenter.hover', function (_event: MouseEvent, renderableLink: RenderableGraphLink): void {
       const hoveredElement = this as SVGLineElement;
 
+      // Clear any previous hover states before applying new one
+      clearAllHoverStates();
+
       // If this is a hit area, find the corresponding visible link element
       let targetLinkElement: SVGLineElement;
       if (hoveredElement.classList.contains('link-hit-area')) {

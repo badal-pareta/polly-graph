@@ -7,6 +7,7 @@ import { createZoom } from './create-zoom';
 import { createGraphSimulation } from './create-graph-simulation';
 import { observeResize } from '../utils/observe-resize';
 import { ErrorHandler } from '../utils/error-handler';
+import { GraphLayers } from '../contracts/graph-layers.interface';
 
 import { renderLinks, RenderableGraphLink } from '../renderer/links';
 import { renderNodes } from '../renderer/nodes';
@@ -15,6 +16,13 @@ import { renderLinkLabels, RenderableLinkLabel } from '../renderer/link-labels';
 import { GraphNode } from '../contracts/graph.types';
 
 import { SimulationConfig } from '../contracts/simulation.interface';
+
+export interface GraphSelections {
+  linkSelection: Selection<SVGLineElement, RenderableGraphLink, BaseType, unknown>;
+  linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, SVGGElement, unknown>;
+  nodeSelection: Selection<SVGCircleElement, GraphNode, BaseType, unknown>;
+  labelSelection: Selection<SVGTextElement, GraphNode, BaseType, unknown>;
+}
 
 /**
  * Render Pipeline - Handles the rendering workflow
@@ -31,13 +39,7 @@ export class RenderPipeline {
   /**
    * Execute the complete render pipeline
    */
-  async execute(): Promise<{
-    linkSelection: Selection<SVGLineElement, RenderableGraphLink, BaseType, unknown>;
-    linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, SVGGElement, unknown>;
-    nodeSelection: Selection<SVGCircleElement, GraphNode, BaseType, unknown>;
-    labelSelection: Selection<SVGTextElement, GraphNode, BaseType, unknown>;
-  }> {
-    console.log('[RenderPipeline] Starting render pipeline');
+  async execute(): Promise<GraphSelections> {
 
     // Step 1: Cleanup previous render
     this.cleanup();
@@ -60,7 +62,6 @@ export class RenderPipeline {
     // Step 7: Create and configure simulation
     await this.initializeSimulation(selections);
 
-    console.log('[RenderPipeline] Render pipeline completed');
     return selections;
   }
 
@@ -71,7 +72,6 @@ export class RenderPipeline {
     ErrorHandler.safeDOMOperation(() => {
       if (this.manager.svgElement && this.manager.config.container.contains(this.manager.svgElement)) {
         this.manager.config.container.removeChild(this.manager.svgElement);
-        console.log('[RenderPipeline] Removed existing SVG');
       }
     }, { operation: 'remove existing SVG', component: 'render-pipeline' });
   }
@@ -98,7 +98,6 @@ export class RenderPipeline {
       layers.interactionRect.setAttribute('height', String(initialHeight));
     }
 
-    console.log('[RenderPipeline] Created DOM structure with dimensions:', this.manager.dimensions);
     return layers;
   }
 
@@ -118,7 +117,17 @@ export class RenderPipeline {
 
       if (this.manager.simulation) {
         this.manager.simulation.force('center', forceCenter(width / 2, height / 2));
-        if (this.manager.simulation.alpha() < 0.2) {
+
+        // If simulation was paused due to invalid dimensions, position nodes and restart
+        if (this.manager.simulationPaused && width > 0 && height > 0) {
+
+          // Position nodes with current dimensions
+          this.positionNodesWithValidDimensions(width, height);
+
+          // Start simulation
+          this.manager.reheatSimulation(0.3);
+          this.manager.simulationPaused = false;
+        } else if (!this.manager.simulationPaused && this.manager.simulation.alpha() < 0.2) {
           this.manager.reheatSimulation(0.1);
         }
       }
@@ -132,7 +141,6 @@ export class RenderPipeline {
         }, 150);
       }
 
-      console.log('[RenderPipeline] Handled resize:', { width, height });
     });
 
     this.manager.addCleanup(cleanupResize);
@@ -141,7 +149,7 @@ export class RenderPipeline {
   /**
    * Initialize zoom behavior
    */
-  private initializeZoom(layers: any): void {
+  private initializeZoom(layers: GraphLayers): void {
     const zoomResult = createZoom({
       svg: layers.svg,
       interactionLayer: layers.interactionLayer,
@@ -151,13 +159,12 @@ export class RenderPipeline {
     this.manager.zoomBehavior = zoomResult.behavior;
     this.manager.addCleanup(zoomResult.cleanup);
 
-    console.log('[RenderPipeline] Initialized zoom behavior');
   }
 
   /**
    * Render graph components
    */
-  private renderComponents(layers: any) {
+  private renderComponents(layers: GraphLayers): GraphSelections {
     const root = select(layers.root);
     const renderContext = {
       svg: layers.svg,
@@ -170,20 +177,56 @@ export class RenderPipeline {
     const nodeSelection = renderNodes(renderContext, this.manager.config.nodes);
     const labelSelection = renderNodeLabels(renderContext, this.manager.config.nodes);
 
-    console.log('[RenderPipeline] Rendered components:', {
-      links: this.manager.config.links.length,
-      linkLabels: linkLabelSelection.size(),
-      nodes: this.manager.config.nodes.length,
-      nodeLabels: labelSelection.size()
-    });
+    //   links: this.manager.config.links.length,
+    //   linkLabels: linkLabelSelection.size(),
+    //   nodes: this.manager.config.nodes.length,
+    //   nodeLabels: labelSelection.size()
+    // });
 
     return { linkSelection, linkLabelSelection, nodeSelection, labelSelection };
   }
 
   /**
+   * Position nodes when valid dimensions become available
+   */
+  private positionNodesWithValidDimensions(width: number, height: number): void {
+
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Calculate radius that keeps nodes within container bounds with padding
+    const padding = 50;
+    const maxRadius = Math.min(
+      (width - padding * 2) / 2,
+      (height - padding * 2) / 2
+    );
+    const nodeBasedRadius = Math.max(50, Math.min(200, this.manager.config.nodes.length * 3));
+    const seedRadius = Math.min(maxRadius, nodeBasedRadius);
+
+    this.manager.config.nodes.forEach((node, index) => {
+      if (node.x == null || node.y == null) {
+        // Add some randomness to break perfect symmetry
+        const angle = (index / Math.max(this.manager.config.nodes.length, 1)) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+        const radius = seedRadius * (0.3 + Math.random() * 0.7);
+
+        // Calculate position
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+
+        // Ensure nodes stay within container bounds
+        const nodeRadius = 12; // Default node radius
+        node.x = Math.max(nodeRadius, Math.min(width - nodeRadius, x));
+        node.y = Math.max(nodeRadius, Math.min(height - nodeRadius, y));
+      }
+    });
+
+    //   this.manager.config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
+  }
+
+  /**
    * Initialize and configure simulation
    */
-  private async initializeSimulation(selections: any): Promise<void> {
+  private async initializeSimulation(selections: GraphSelections): Promise<void> {
     const simulationConfig: SimulationConfig = {
       nodes: this.manager.config.nodes,
       links: this.manager.config.links,
@@ -192,34 +235,41 @@ export class RenderPipeline {
       config: this.manager.config.simulation
     };
 
-    console.log('[RenderPipeline] Creating simulation with config:', {
-      nodeCount: simulationConfig.nodes.length,
-      linkCount: simulationConfig.links.length,
-      dimensions: { width: simulationConfig.width, height: simulationConfig.height },
-      center: { x: simulationConfig.width / 2, y: simulationConfig.height / 2 },
-      customForces: this.manager.config.simulation?.forces ? 'Yes' : 'No'
-    });
+    //   nodeCount: simulationConfig.nodes.length,
+    //   linkCount: simulationConfig.links.length,
+    //   dimensions: { width: simulationConfig.width, height: simulationConfig.height },
+    //   center: { x: simulationConfig.width / 2, y: simulationConfig.height / 2 },
+    //   customForces: this.manager.config.simulation?.forces ? 'Yes' : 'No'
+    // });
 
     // Debug: Check node positions before simulation creation
-    console.log('[RenderPipeline] Node positions BEFORE createGraphSimulation:',
-      this.manager.config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
+    //   this.manager.config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
 
     try {
       const simulationResult = createGraphSimulation(simulationConfig);
       this.manager.simulation = simulationResult.simulation;
 
       // Debug: Check node positions after simulation creation
-      console.log('[RenderPipeline] Node positions AFTER createGraphSimulation:',
-        this.manager.config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
+      //   this.manager.config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
 
       // Apply center force with consistent coordinates
       const centerX = simulationConfig.width / 2;
       const centerY = simulationConfig.height / 2;
       this.manager.simulation.force('center', forceCenter(centerX, centerY));
 
-      console.log('[RenderPipeline] Applied center force:', { centerX, centerY });
-      this.manager.reheatSimulation(0.3);
-      console.log('[RenderPipeline] Simulation created and heated successfully');
+
+      // Only start simulation if container has valid dimensions
+      if (simulationConfig.width > 0 && simulationConfig.height > 0) {
+        this.manager.reheatSimulation(0.3);
+        this.manager.simulationPaused = false;
+
+        // Signal that we need immediate fitView after render completes
+        this.manager.needsImmediateFitView = true;
+
+      } else {
+        this.manager.simulation.stop();
+        this.manager.simulationPaused = true;
+      }
 
     } catch (error) {
       console.error('[RenderPipeline] Simulation creation failed:', error);
