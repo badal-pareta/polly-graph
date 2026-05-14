@@ -3,7 +3,6 @@ import { ZoomBehavior } from 'd3-zoom';
 import { Simulation } from 'd3-force';
 
 import { GraphConfig } from '../contracts/graph-config.interface';
-import { GraphInstance } from '../contracts/graph-instance.interface';
 import { GraphDimensions } from '../contracts/resize.interface';
 import { GraphLayers } from '../contracts/graph-layers.interface';
 import { GraphNode, GraphLink } from '../contracts/graph.types';

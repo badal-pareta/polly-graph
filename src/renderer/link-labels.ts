@@ -61,7 +61,7 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
     .style('cursor', 'pointer');
 
   // First create rectangles as background
-  const rectSelection = labelSelection
+  labelSelection
     .selectAll<SVGRectElement, RenderableLinkLabel>('rect')
     .data((item: RenderableLinkLabel): RenderableLinkLabel[] => [item])
     .join('rect')
@@ -101,7 +101,7 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
         rectElement.setAttribute('height', String(bbox.height + paddingY * 2));
         rectElement.setAttribute('x', String(bbox.x - paddingX));
         rectElement.setAttribute('y', String(bbox.y - paddingY));
-      } catch (error) {
+      } catch {
         // Fallback to estimation if getBBox() fails
         const text = item.link.label ?? '';
         const fontSize = item.style.label.fontSize;

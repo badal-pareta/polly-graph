@@ -5,7 +5,7 @@ import { RenderableGraphLink } from '../renderer/links';
 import { RenderableLinkLabel } from '../renderer/link-labels';
 import { GraphNode } from '../contracts/graph.types';
 import { GraphLayers } from '../contracts/graph-layers.interface';
-import { NodeSelectHandler, LinkSelectHandler, SelectionInteractionConfig } from '../contracts/graph-config.interface';
+import { SelectionInteractionConfig } from '../contracts/graph-config.interface';
 import { TypedGraphEventEmitter } from './event-emitter';
 
 export function deselectNode(

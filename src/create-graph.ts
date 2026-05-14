@@ -1,6 +1,6 @@
 // create-graph.ts - Clean modular orchestration layer
 import 'd3-transition';
-import { zoomIdentity, zoomTransform } from 'd3-zoom';
+import { zoomIdentity } from 'd3-zoom';
 import { select } from 'd3-selection';
 import { extent } from 'd3';
 
@@ -16,7 +16,7 @@ import { captureAndDownloadGraph } from './utils/export-graph';
 import { GraphValidator, GraphValidationError } from './utils/validation';
 
 // Types
-import { GraphConfig, NodeSelectHandler, LinkSelectHandler } from './contracts/graph-config.interface';
+import { GraphConfig } from './contracts/graph-config.interface';
 import { GraphInstance } from './contracts/graph-instance.interface';
 import { GraphNode, GraphLink, GraphNodeWithInitial } from './contracts/graph.types';
 import { GraphEventMap } from './utils/event-emitter';
@@ -130,7 +130,6 @@ export function createGraph(config: GraphConfig): GraphInstance {
     }
 
     const svg = graphManager.svgElement;
-    const currentTransform = zoomTransform(svg);
 
     select(svg)
       .transition()
@@ -185,9 +184,7 @@ export function createGraph(config: GraphConfig): GraphInstance {
     }));
 
 
-    nodes.forEach(n => {
-      const nodeRadius = 12;
-    });
+    // Calculate node bounds for fit view
 
     const xExtent = extent(positions, (d: {x: number, y: number}) => d.x) as [number, number];
     const yExtent = extent(positions, (d: {x: number, y: number}) => d.y) as [number, number];
@@ -241,11 +238,7 @@ export function createGraph(config: GraphConfig): GraphInstance {
     }));
 
 
-    nodes.forEach((n: GraphNodeWithInitial) => {
-      const initialX = n.initialX ?? n.x ?? 0;
-      const initialY = n.initialY ?? n.y ?? 0;
-      const nodeRadius = 12;
-    });
+    // Calculate bounds using initial positions
 
     const xExtent = extent(positions, (d: {x: number, y: number}) => d.x) as [number, number];
     const yExtent = extent(positions, (d: {x: number, y: number}) => d.y) as [number, number];
@@ -305,7 +298,10 @@ export function createGraph(config: GraphConfig): GraphInstance {
   function on(event: 'nodeDeselect', handler: (node: GraphNode, element: SVGCircleElement) => void): () => void;
   function on(event: 'linkSelect', handler: (link: GraphLink, element: SVGLineElement) => void): () => void;
   function on(event: 'linkDeselect', handler: (link: GraphLink, element: SVGLineElement) => void): () => void;
-  function on(event: string, handler: any): () => void {
+  function on(
+    event: 'nodeSelect' | 'nodeDeselect' | 'linkSelect' | 'linkDeselect',
+    handler: ((node: GraphNode, element: SVGCircleElement) => void) | ((link: GraphLink, element: SVGLineElement) => void)
+  ): () => void {
     if (!graphManager.eventEmitter) {
       console.warn('[Polly Graph] Event emitter not available');
       return () => {};
@@ -313,13 +309,13 @@ export function createGraph(config: GraphConfig): GraphInstance {
 
     switch (event) {
       case 'nodeSelect':
-        return graphManager.eventEmitter.on('nodeSelect', (data) => handler(data.node, data.element));
+        return graphManager.eventEmitter.on('nodeSelect', (data) => (handler as (node: GraphNode, element: SVGCircleElement) => void)(data.node, data.element));
       case 'nodeDeselect':
-        return graphManager.eventEmitter.on('nodeDeselect', (data) => handler(data.node, data.element));
+        return graphManager.eventEmitter.on('nodeDeselect', (data) => (handler as (node: GraphNode, element: SVGCircleElement) => void)(data.node, data.element));
       case 'linkSelect':
-        return graphManager.eventEmitter.on('linkSelect', (data) => handler(data.link, data.element));
+        return graphManager.eventEmitter.on('linkSelect', (data) => (handler as (link: GraphLink, element: SVGLineElement) => void)(data.link, data.element));
       case 'linkDeselect':
-        return graphManager.eventEmitter.on('linkDeselect', (data) => handler(data.link, data.element));
+        return graphManager.eventEmitter.on('linkDeselect', (data) => (handler as (link: GraphLink, element: SVGLineElement) => void)(data.link, data.element));
       default:
         console.warn('[Polly Graph] Unknown event:', event);
         return () => {};
@@ -330,7 +326,7 @@ export function createGraph(config: GraphConfig): GraphInstance {
   function off(event: 'nodeDeselect', handler: (node: GraphNode, element: SVGCircleElement) => void): void;
   function off(event: 'linkSelect', handler: (link: GraphLink, element: SVGLineElement) => void): void;
   function off(event: 'linkDeselect', handler: (link: GraphLink, element: SVGLineElement) => void): void;
-  function off(event: string, handler?: any): void {
+  function off(event: string, _handler?: unknown): void {
     if (!graphManager.eventEmitter) return;
     graphManager.eventEmitter.removeAllListeners(event as keyof GraphEventMap);
   }

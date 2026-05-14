@@ -1,233 +1,296 @@
-import html2canvas from 'html2canvas';
+/**
+ * SVG-based graph export functionality.
+ * Uses SVG-to-image conversion to avoid CSS color function compatibility issues.
+ */
 
 export interface ExportOptions {
   fileName?: string;
   backgroundColor?: string;
+  scale?: number;
+  includeLegend?: boolean;
   pixelRatio?: number;
 }
 
-interface StyleBackup {
-  readonly element: HTMLElement;
-  readonly styleAttribute: string | null;
+interface LegendDimensions {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  padding: number;
+  itemHeight: number;
+  itemSpacing: number;
+}
+
+interface LegendEntry {
+  type: string;
+  color: string;
 }
 
 export async function captureAndDownloadGraph(container: HTMLElement, options: ExportOptions = {}): Promise<void> {
-
   const {
     fileName = `graph-export-${Date.now()}.png`,
     backgroundColor = '#ffffff',
-    pixelRatio = 2
+    scale = 2,
+    includeLegend = true
   } = options;
 
-  const root = container.querySelector('.pg-root') as HTMLElement | null;
-  if (!root) { return; }
-
-  const controls = root.querySelector('.pg-controls') as HTMLElement | null;
-  const legendToggle = root.querySelector('.pg-legend-toggle') as HTMLElement | null;
-  const interactionLayer = root.querySelector('.pg-interaction-layer') as HTMLElement | null;
-  const legend = root.querySelector('.pg-legend') as HTMLElement | null;
-
-  const wasCollapsed: boolean = Boolean(legend?.classList.contains('pg-is-collapsed'));
-
-  const styleBackups: StyleBackup[] = [];
-
-  if (controls) { controls.style.display = 'none'; }
-
-  if (legendToggle) { legendToggle.style.display = 'none'; }
-
-  if (interactionLayer) { interactionLayer.style.display = 'none'; }
-
-  if (legend && wasCollapsed) {
-    legend.classList.remove('pg-is-collapsed');
+  // Find the SVG element in the container
+  const svgElement = container.querySelector('svg.pg-canvas') as SVGSVGElement;
+  if (!svgElement) {
+    throw new Error('SVG element not found in container');
   }
+
+  const svgRect = svgElement.getBoundingClientRect();
+  const graphWidth = svgRect.width || 800;
+  const graphHeight = svgRect.height || 600;
+
+  // Clone SVG for export
+  const svgClone = svgElement.cloneNode(true) as SVGSVGElement;
+
+  let totalWidth = graphWidth;
+  let totalHeight = graphHeight;
+
+  // Extract legend data and add to SVG if requested
+  if (includeLegend) {
+    const legendEntries = extractLegendData(container);
+
+    if (legendEntries.length > 0) {
+      const legendDimensions = calculateLegendDimensions(legendEntries, graphWidth);
+
+      // Extend canvas dimensions to include legend
+      totalWidth = graphWidth + 20 + legendDimensions.width + 20; // 20px margins
+      totalHeight = Math.max(graphHeight, legendDimensions.height + 40); // Ensure legend fits
+
+      // Update SVG dimensions
+      svgClone.setAttribute('width', totalWidth.toString());
+      svgClone.setAttribute('height', totalHeight.toString());
+      svgClone.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+
+      // Create and append legend
+      const legendGroup = createLegendSVGElement(legendEntries, legendDimensions);
+      svgClone.appendChild(legendGroup);
+    }
+  }
+
+  // Ensure SVG has proper namespace
+  svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  svgClone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+  // Serialize SVG to string
+  const svgString = new XMLSerializer().serializeToString(svgClone);
+  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
 
   try {
-    normalizeFirefoxColors(root, styleBackups);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
 
-    const canvas: HTMLCanvasElement = await html2canvas(root,
-      {
-        scale: pixelRatio,
-        backgroundColor,
-        useCORS: true,
-        logging: false
-      }
-    );
-
-    const dataUrl: string = canvas.toDataURL('image/png');
-
-    const link: HTMLAnchorElement = document.createElement('a');
-
-    link.download = fileName;
-    link.href = dataUrl;
-
-    link.click();
-  } catch (error: unknown) {
-    console.error(error);
-  } finally {
-    restoreStyles(styleBackups);
-
-    if (controls) { controls.style.display = 'flex'; }
-    if (legendToggle) { legendToggle.style.display = 'flex'; }
-    if (interactionLayer) { interactionLayer.style.display = 'block'; }
-    if (legend && wasCollapsed) { legend.classList.add('pg-is-collapsed'); }
-  }
-
-}
-
-function normalizeFirefoxColors(root: HTMLElement, backups: StyleBackup[]): void {
-
-  const elements: HTMLElement[] = [
-    root,
-    ...Array.from(root.querySelectorAll<HTMLElement>('*'))
-  ];
-
-  const colorProperties: readonly string[] = [
-    'color',
-    'background-color',
-    'border-color',
-    'border-top-color',
-    'border-right-color',
-    'border-bottom-color',
-    'border-left-color',
-    'outline-color',
-    'text-decoration-color',
-    '-webkit-text-fill-color',
-    '-webkit-text-stroke-color',
-    'fill',
-    'stroke'
-  ];
-
-  for (const element of elements) {
-    const computedStyle: CSSStyleDeclaration =
-      window.getComputedStyle(element);
-
-    let hasChanges = false;
-
-    for (const propertyName of colorProperties) {
-      const value: string =
-        computedStyle.getPropertyValue(propertyName);
-
-      if (!value.includes('color(') && !value.includes('oklab(')) {
-        continue;
-      }
-
-      const normalizedValue: string =
-        convertColorToRgb(value);
-
-      if (!normalizedValue) {
-        continue;
-      }
-
-      if (!hasChanges) {
-        backups.push({
-          element,
-          styleAttribute: element.getAttribute('style')
-        });
-
-        hasChanges = true;
-      }
-
-      element.style.setProperty(
-        propertyName,
-        normalizedValue
-      );
-    }
-  }
-
-}
-
-function convertColorToRgb(
-  value: string
-): string {
-
-  // Handle srgb color function
-  const srgbMatch: RegExpMatchArray | null =
-    value.match(
-      /color\(srgb\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\)/i
-    );
-
-  if (srgbMatch) {
-    const red: number =
-      Math.round(Number(srgbMatch[1]) * 255);
-
-    const green: number =
-      Math.round(Number(srgbMatch[2]) * 255);
-
-    const blue: number =
-      Math.round(Number(srgbMatch[3]) * 255);
-
-    return `rgb(${red}, ${green}, ${blue})`;
-  }
-
-  // Handle oklab color function
-  const oklabMatch: RegExpMatchArray | null =
-    value.match(
-      /oklab\(\s*([0-9.%]+)\s+([0-9.\-]+)\s+([0-9.\-]+)\s*\)/i
-    );
-
-  if (oklabMatch) {
-    let l = Number(oklabMatch[1]);
-    const a = Number(oklabMatch[2]);
-    const b = Number(oklabMatch[3]);
-
-    // Handle percentage values for lightness
-    if (oklabMatch[1] && oklabMatch[1].includes('%')) {
-      l = l / 100;
+    if (!ctx) {
+      throw new Error('Could not get canvas context');
     }
 
-    // Convert OKLAB to RGB (simplified conversion)
-    const rgb = oklabToRgb(l, a, b);
-    return `rgb(${Math.round(rgb.r * 255)}, ${Math.round(rgb.g * 255)}, ${Math.round(rgb.b * 255)})`;
-  }
+    // Set canvas dimensions with scale for quality
+    canvas.width = totalWidth * scale;
+    canvas.height = totalHeight * scale;
 
-  return '';
+    // Scale context for high-DPI rendering
+    ctx.scale(scale, scale);
+
+    // Set background
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+    // Convert SVG to image
+    await new Promise<void>((resolve, reject) => {
+      const img = new Image();
+
+      const cleanup = () => {
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+        URL.revokeObjectURL(svgUrl);
+      };
+
+      img.onload = () => {
+        try {
+          ctx.drawImage(img, 0, 0, totalWidth, totalHeight);
+
+          canvas.toBlob((blob) => {
+            cleanup();
+
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = fileName;
+
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+
+              resolve();
+            } else {
+              reject(new Error('Failed to generate image blob'));
+            }
+          }, 'image/png', 0.95);
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        cleanup();
+        reject(new Error('Failed to load SVG image'));
+      };
+
+      img.src = svgUrl;
+    });
+
+  } catch (error) {
+    URL.revokeObjectURL(svgUrl);
+    throw error;
+  }
 }
 
-function oklabToRgb(l: number, a: number, b: number): { r: number; g: number; b: number } {
-  // Simplified OKLAB to RGB conversion
-  // This is an approximation for html2canvas compatibility
+function extractLegendData(container: HTMLElement): LegendEntry[] {
+  const legendEntries: LegendEntry[] = [];
 
-  // Convert OKLAB to linear RGB (simplified)
-  const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
-  const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
-  const s_ = l - 0.0894841775 * a - 1.2914855480 * b;
+  // Look for existing legend in the container
+  const legendContainer = container.querySelector('.pg-legend');
+  if (!legendContainer) {
+    return legendEntries;
+  }
 
-  const l3 = l_ * l_ * l_;
-  const m3 = m_ * m_ * m_;
-  const s3 = s_ * s_ * s_;
+  const legendItems = legendContainer.querySelectorAll('.pg-legend-item');
 
-  // Convert to linear RGB
-  let r = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
-  let g = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
-  let b_rgb = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+  legendItems.forEach(item => {
+    const swatch = item.querySelector('.pg-legend-swatch') as HTMLElement;
+    const label = item.querySelector('.pg-legend-label');
 
-  // Apply gamma correction (sRGB)
-  r = r > 0.0031308 ? 1.055 * Math.pow(r, 1.0 / 2.4) - 0.055 : 12.92 * r;
-  g = g > 0.0031308 ? 1.055 * Math.pow(g, 1.0 / 2.4) - 0.055 : 12.92 * g;
-  b_rgb = b_rgb > 0.0031308 ? 1.055 * Math.pow(b_rgb, 1.0 / 2.4) - 0.055 : 12.92 * b_rgb;
+    if (swatch && label) {
+      const backgroundColor = swatch.style.backgroundColor || getComputedStyle(swatch).backgroundColor;
+      const type = label.textContent || 'Unknown';
 
-  // Clamp to [0, 1]
+      // Convert any RGB/color values to hex if needed
+      const color = normalizeColor(backgroundColor);
+
+      legendEntries.push({
+        type: type.trim(),
+        color
+      });
+    }
+  });
+
+  return legendEntries;
+}
+
+function calculateLegendDimensions(
+  legendEntries: LegendEntry[],
+  graphWidth: number
+): LegendDimensions {
+  // Calculate dynamic legend width based on longest type name
+  const longestTypeName = legendEntries.reduce((max, entry) => {
+    return entry.type.length > max ? entry.type.length : max;
+  }, 0);
+
+  const minLegendWidth = 180;
+  const calculatedWidth = longestTypeName * 8 + 60; // 60px for padding and circle
+  const width = Math.max(minLegendWidth, Math.min(calculatedWidth, 320)); // Cap at 320px
+
+  const itemHeight = 24;
+  const itemSpacing = 8;
+  const padding = 16;
+
+  const height = padding +
+                 legendEntries.length * (itemHeight + itemSpacing) - itemSpacing + padding;
+
+  const legendMargin = 20;
+  const x = graphWidth + legendMargin;
+  const y = 20;
+
   return {
-    r: Math.max(0, Math.min(1, r)),
-    g: Math.max(0, Math.min(1, g)),
-    b: Math.max(0, Math.min(1, b_rgb))
+    width,
+    height,
+    x,
+    y,
+    padding,
+    itemHeight,
+    itemSpacing
   };
 }
 
-function restoreStyles(
-  backups: readonly StyleBackup[]
-): void {
+function createLegendSVGElement(
+  legendEntries: LegendEntry[],
+  dimensions: LegendDimensions
+): SVGGElement {
+  const {
+    x: legendX,
+    y: legendY,
+    width: legendWidth,
+    height: legendHeight,
+    padding: legendPadding,
+    itemHeight: legendItemHeight,
+    itemSpacing: legendItemSpacing,
+  } = dimensions;
 
-  for (const backup of backups) {
-    if (backup.styleAttribute === null) {
-      backup.element.removeAttribute('style');
-      continue;
-    }
+  // Create legend group
+  const legendGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  legendGroup.setAttribute('class', 'export-legend');
 
-    backup.element.setAttribute(
-      'style',
-      backup.styleAttribute
-    );
+  // Create legend background
+  const legendBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  legendBg.setAttribute('x', legendX.toString());
+  legendBg.setAttribute('y', legendY.toString());
+  legendBg.setAttribute('width', legendWidth.toString());
+  legendBg.setAttribute('height', legendHeight.toString());
+  legendBg.setAttribute('fill', '#ffffff');
+  legendBg.setAttribute('stroke', '#e2e8f0');
+  legendBg.setAttribute('stroke-width', '1');
+  legendBg.setAttribute('rx', '8');
+  legendGroup.appendChild(legendBg);
+
+
+  // Create legend items
+  legendEntries.forEach((entry, index) => {
+    const itemY = legendY + legendPadding +
+                  index * (legendItemHeight + legendItemSpacing);
+
+    // Create circle swatch
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', (legendX + legendPadding + 7).toString());
+    circle.setAttribute('cy', (itemY + legendItemHeight / 2).toString());
+    circle.setAttribute('r', '7');
+    circle.setAttribute('fill', entry.color);
+    circle.setAttribute('stroke', 'none');
+    legendGroup.appendChild(circle);
+
+    // Create text label
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', (legendX + legendPadding + 24).toString());
+    text.setAttribute('y', (itemY + legendItemHeight / 2).toString());
+    text.setAttribute('font-family', 'Inter, -apple-system, BlinkMacSystemFont, sans-serif');
+    text.setAttribute('font-size', '12');
+    text.setAttribute('fill', '#6b7280');
+    text.setAttribute('dominant-baseline', 'middle');
+    text.textContent = entry.type;
+    legendGroup.appendChild(text);
+  });
+
+  return legendGroup;
+}
+
+function normalizeColor(color: string): string {
+  // Handle rgb() values by converting to hex
+  const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1] ?? '0');
+    const g = parseInt(rgbMatch[2] ?? '0');
+    const b = parseInt(rgbMatch[3] ?? '0');
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
+  // Return as-is if already hex or named color
+  return color;
 }

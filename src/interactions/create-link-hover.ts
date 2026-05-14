@@ -28,7 +28,7 @@ export function createLinkHover(
   function clearAllHoverStates(): void {
     // Clear all link hover states
     root.selectAll<SVGLineElement, RenderableGraphLink>('line[data-hovered]')
-      .each(function(d) {
+      .each(function(_d) {
         const linkElement = this as SVGLineElement;
         delete linkElement.dataset.hovered;
 
@@ -182,7 +182,7 @@ export function createLinkHover(
 
       if (correspondingLink.node() && correspondingHitArea.node()) {
         const linkElement = correspondingLink.node()!;
-        const hitAreaElement = correspondingHitArea.node()!;
+        // const hitAreaElement = correspondingHitArea.node()!; // TODO: Use for future enhancements
         const renderableLink = correspondingLink.datum();
 
         // Apply hover styles (no data attributes needed)
@@ -225,7 +225,7 @@ export function createLinkHover(
 
       if (correspondingLink.node() && correspondingHitArea.node()) {
         const linkElement = correspondingLink.node()!;
-        const hitAreaElement = correspondingHitArea.node()!;
+        // const hitAreaElement = correspondingHitArea.node()!; // TODO: Use for future enhancements
 
         // Reset hover styles (no data attributes to clean up)
 

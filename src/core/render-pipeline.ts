@@ -226,7 +226,7 @@ export class RenderPipeline {
   /**
    * Initialize and configure simulation
    */
-  private async initializeSimulation(selections: GraphSelections): Promise<void> {
+  private async initializeSimulation(_selections: GraphSelections): Promise<void> {
     const simulationConfig: SimulationConfig = {
       nodes: this.manager.config.nodes,
       links: this.manager.config.links,
@@ -276,7 +276,7 @@ export class RenderPipeline {
       ErrorHandler.handleSimulationError(
         error as Error,
         { operation: 'create simulation', component: 'render-pipeline', data: simulationConfig },
-        this.manager.simulation
+        this.manager.simulation ?? undefined
       );
     }
   }

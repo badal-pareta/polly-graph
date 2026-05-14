@@ -67,11 +67,11 @@ export const demoNodes: GraphNode[] = [
     tooltip: 'SARS-CoV-2 respiratory disease',
     style: {
       radius: 35,
-      fill: '#dc2626',
-      stroke: '#b91c1c',
+      fill: 'color-mix(in srgb, #dc2626, #000000 10%)',
+      stroke: 'color-mix(in srgb, #dc2626, #000000 30%)',
       strokeWidth: 3,
       opacity: 1,
-      textColor: '#ffffff',
+      textColor: 'color-mix(in srgb, #ffffff, #dc2626 15%)',
     },
   },
 
@@ -83,8 +83,8 @@ export const demoNodes: GraphNode[] = [
     tooltip: 'Lung inflammation complication',
     style: {
       radius: 22,
-      fill: '#ef4444',
-      stroke: '#dc2626',
+      fill: 'color-mix(in srgb, #ef4444, #ffffff 15%)',
+      stroke: 'color-mix(in srgb, #ef4444, #000000 25%)',
       strokeWidth: 2,
       opacity: 1,
       textColor: '#ffffff',
@@ -114,11 +114,11 @@ export const demoNodes: GraphNode[] = [
     tooltip: 'Angiotensin Converting Enzyme 2',
     style: {
       radius: 24,
-      fill: '#3b82f6',
-      stroke: '#2563eb',
+      fill: 'color-mix(in srgb, #3b82f6, #ffffff 20%)',
+      stroke: 'color-mix(in srgb, #3b82f6, #000000 25%)',
       strokeWidth: 2,
       opacity: 1,
-      textColor: '#ffffff',
+      textColor: 'color-mix(in srgb, #ffffff, #3b82f6 25%)',
     },
   },
 
@@ -160,11 +160,11 @@ export const demoNodes: GraphNode[] = [
     tooltip: 'Antiviral medication',
     style: {
       radius: 24,
-      fill: '#059669',
-      stroke: '#047857',
+      fill: 'color-mix(in srgb, #059669, #ffffff 10%)',
+      stroke: 'color-mix(in srgb, #059669, #000000 30%)',
       strokeWidth: 2,
       opacity: 1,
-      textColor: '#ffffff',
+      textColor: 'color-mix(in srgb, #ffffff, #059669 20%)',
     },
   },
 
@@ -299,10 +299,20 @@ export const demoLinks: GraphLink[] = [
     target: 'disease-pneumonia',
     label: 'causes',
     style: {
-      stroke: '#ef4444',
+      stroke: 'color-mix(in srgb, #ef4444, #000000 15%)',
       strokeWidth: 3,
       opacity: 0.8,
-      label: { enabled: true, visibility: 'hover' }
+      arrow: {
+        enabled: true,
+        fill: 'color-mix(in srgb, #ef4444, #000000 20%)'
+      },
+      label: {
+        enabled: true,
+        visibility: 'hover',
+        backgroundFill: 'color-mix(in srgb, #ef4444, #ffffff 85%)',
+        borderColor: 'color-mix(in srgb, #ef4444, #ffffff 30%)',
+        textColor: 'color-mix(in srgb, #ef4444, #000000 40%)'
+      }
     },
   },
 
@@ -323,10 +333,20 @@ export const demoLinks: GraphLink[] = [
     target: 'gene-ace2',
     label: 'targets receptor',
     style: {
-      stroke: '#3b82f6',
+      stroke: 'color-mix(in srgb, #3b82f6, #000000 10%)',
       strokeWidth: 3,
       opacity: 0.8,
-      label: { enabled: true, visibility: 'hover' }
+      arrow: {
+        enabled: true,
+        fill: 'color-mix(in srgb, #3b82f6, #000000 15%)'
+      },
+      label: {
+        enabled: true,
+        visibility: 'hover',
+        backgroundFill: 'color-mix(in srgb, #3b82f6, #ffffff 80%)',
+        borderColor: 'color-mix(in srgb, #3b82f6, #ffffff 25%)',
+        textColor: 'color-mix(in srgb, #3b82f6, #000000 35%)'
+      }
     },
   },
 

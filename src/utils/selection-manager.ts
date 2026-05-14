@@ -486,7 +486,7 @@ export class SelectionManager {
         const labelElement = hoverLinkLabelsLayer.firstChild as SVGGElement;
 
         // Reset opacity for hover-only labels before moving
-        const labelData = (labelElement as any).__data__ as RenderableLinkLabel;
+        const labelData = (labelElement as SVGGElement & { __data__: RenderableLinkLabel }).__data__;
         if (labelData && labelData.style.label.visibility === 'hover' &&
             !labelElement.classList.contains('label-selection-pinned')) {
           labelElement.style.opacity = '0';

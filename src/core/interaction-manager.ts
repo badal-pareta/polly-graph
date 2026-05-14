@@ -1,4 +1,4 @@
-import { Selection, select, BaseType } from 'd3-selection';
+import { select } from 'd3-selection';
 
 import { GraphManager } from './graph-manager';
 import { GraphSelections } from './render-pipeline';
@@ -126,8 +126,7 @@ export class InteractionManager {
         this.manager.linkMarkerSnapshots = new Map<SVGLineElement, string | null>();
         const manager = this.manager;
         selections.linkSelection.each(function(this: SVGLineElement): void {
-          const linkElement = this;
-          manager.linkMarkerSnapshots!.set(linkElement, linkElement.getAttribute('marker-end'));
+          manager.linkMarkerSnapshots!.set(this, this.getAttribute('marker-end'));
         });
       }
 

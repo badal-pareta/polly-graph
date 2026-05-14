@@ -3,10 +3,13 @@
  * Provides graceful degradation and helpful error messages.
  */
 
+import { Simulation } from 'd3-force';
+import { GraphNode, GraphLink } from '../contracts/graph.types';
+
 export interface ErrorContext {
   readonly operation: string;
   readonly component?: string;
-  readonly data?: any;
+  readonly data?: unknown;
 }
 
 export class GraphError extends Error {
@@ -161,8 +164,8 @@ export class ErrorHandler {
   /**
    * Validate and handle D3 selection operations
    */
-  static validateSelection<T>(
-    selection: any,
+  static validateSelection<T extends { size(): number }>(
+    selection: T | null | undefined,
     context: ErrorContext,
     operation: (sel: T) => void
   ): void {
@@ -187,7 +190,7 @@ export class ErrorHandler {
   static handleSimulationError(
     error: Error,
     context: ErrorContext,
-    simulation?: any
+    simulation?: Simulation<GraphNode, GraphLink>
   ): void {
     const graphError = this.createRecoverableError(
       `Simulation error: ${error.message}`,

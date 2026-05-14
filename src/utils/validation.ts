@@ -4,7 +4,7 @@
  */
 
 import { GraphConfig, GraphInteractionConfig } from '../contracts/graph-config.interface';
-import { GraphNode, GraphLink } from '../contracts/graph.types';
+import { GraphNode, GraphLink, NodeStyle } from '../contracts/graph.types';
 
 export interface ValidationError {
   readonly field: string;
@@ -288,7 +288,7 @@ export class GraphValidator {
   /**
    * Validate node style
    */
-  private static validateNodeStyle(style: any, fieldPrefix: string): ValidationResult {
+  private static validateNodeStyle(style: NodeStyle, fieldPrefix: string): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
@@ -315,7 +315,7 @@ export class GraphValidator {
     }
 
     // Validate colors
-    const colorFields = ['fill', 'stroke', 'textColor'];
+    const colorFields: (keyof NodeStyle)[] = ['fill', 'stroke', 'textColor'];
     colorFields.forEach(field => {
       if (style[field] !== undefined) {
         if (typeof style[field] !== 'string') {

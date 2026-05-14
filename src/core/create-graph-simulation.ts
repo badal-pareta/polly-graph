@@ -316,38 +316,39 @@ function seedNodePositions(
   });
 }
 
-function calculateLinkDistance(
-  link: GraphLink
-): number {
+// TODO: Future enhancement - dynamic link distance calculation based on node sizes and labels
+// function calculateLinkDistance(
+//   link: GraphLink
+// ): number {
 
-  const source: GraphNode =
-    link.source as GraphNode;
+//   const source: GraphNode =
+//     link.source as GraphNode;
 
-  const target: GraphNode =
-    link.target as GraphNode;
+//   const target: GraphNode =
+//     link.target as GraphNode;
 
-  const sourceRadius: number =
-    source.style?.radius ?? 20;
+//   const sourceRadius: number =
+//     source.style?.radius ?? 20;
 
-  const targetRadius: number =
-    target.style?.radius ?? 20;
+//   const targetRadius: number =
+//     target.style?.radius ?? 20;
 
-  // Base distance: node radii + clearance
-  let distance = sourceRadius + targetRadius + 60;
+//   // Base distance: node radii + clearance
+//   let distance = sourceRadius + targetRadius + 60;
 
-  // Add space for labels if present
-  if (link.label) {
-    // Estimate label width: roughly 8px per character + padding
-    const labelWidth = (link.label.length * 8) + 16; // 8px per char + 16px padding
-    const labelHeight = 24; // Default label height
+//   // Add space for labels if present
+//   if (link.label) {
+//     // Estimate label width: roughly 8px per character + padding
+//     const labelWidth = (link.label.length * 8) + 16; // 8px per char + 16px padding
+//     const labelHeight = 24; // Default label height
 
-    // Add label space requirement to distance
-    // Use the larger dimension (width or height) plus extra clearance
-    const labelSpace = Math.max(labelWidth, labelHeight) + 40; // 40px clearance
-    distance += labelSpace;
-  }
+//     // Add label space requirement to distance
+//     // Use the larger dimension (width or height) plus extra clearance
+//     const labelSpace = Math.max(labelWidth, labelHeight) + 40; // 40px clearance
+//     distance += labelSpace;
+//   }
 
-  // Minimum distance to prevent overlapping
-  return Math.max(distance, 100);
+//   // Minimum distance to prevent overlapping
+//   return Math.max(distance, 100);
 
-}
+// }

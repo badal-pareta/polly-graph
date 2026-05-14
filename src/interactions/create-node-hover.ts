@@ -90,7 +90,7 @@ export function createNodeHover(
         const labelElement = hoverLinkLabelsLayer.firstChild as SVGGElement;
 
         // Reset opacity for hover-only labels before moving
-        const labelData = (labelElement as any).__data__ as RenderableLinkLabel;
+        const labelData = (labelElement as unknown as { __data__: RenderableLinkLabel }).__data__;
         if (labelData && labelData.style.label.visibility === 'hover' &&
             !labelElement.classList.contains('label-selection-pinned')) {
           labelElement.style.opacity = '0';
@@ -139,7 +139,7 @@ export function createNodeHover(
           return source.id === hoveredNode.id || target.id === hoveredNode.id;
         });
 
-      connectedLinks.each(function(renderableLink: RenderableGraphLink) {
+      connectedLinks.each(function(_renderableLink: RenderableGraphLink) {
         const linkElement = this as SVGLineElement;
 
         // Move link to hover links sub-layer for proper visual hierarchy
@@ -178,7 +178,7 @@ export function createNodeHover(
           }
         });
     })
-    .on('mouseleave.links', function(_event, hoveredNode: GraphNode) {
+    .on('mouseleave.links', function(_event, _hoveredNode: GraphNode) {
       // Clear all hover state when leaving any node
       clearAllHoverLayers();
     });

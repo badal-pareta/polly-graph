@@ -3,7 +3,7 @@
  * Implements throttling, batching, and conditional updates to improve performance.
  */
 
-import { Selection } from 'd3-selection';
+import { Selection, BaseType } from 'd3-selection';
 import { GraphNode, GraphLink } from '../contracts/graph.types';
 import { RenderableGraphLink, getShortenedSourcePoint, getShortenedTargetPoint } from '../renderer/links';
 import { RenderableLinkLabel } from '../renderer/link-labels';
@@ -59,10 +59,10 @@ export class PerformanceTickManager {
    * Optimized tick handler with throttling and batching
    */
   createTickHandler(selections: {
-    linkSelection: Selection<SVGLineElement, RenderableGraphLink, any, unknown>;
-    linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, any, unknown>;
-    nodeSelection: Selection<SVGCircleElement, GraphNode, any, unknown>;
-    labelSelection: Selection<SVGTextElement, GraphNode, any, unknown>;
+    linkSelection: Selection<SVGLineElement, RenderableGraphLink, BaseType, unknown>;
+    linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, BaseType, unknown>;
+    nodeSelection: Selection<SVGCircleElement, GraphNode, BaseType, unknown>;
+    labelSelection: Selection<SVGTextElement, GraphNode, BaseType, unknown>;
     tooltipBinding?: { reposition(): void } | null;
   }) {
     return (): void => {
@@ -94,7 +94,7 @@ export class PerformanceTickManager {
   /**
    * Fast link position updates - now with proper source and target offsets
    */
-  private updateLinkPositions(linkSelection: Selection<SVGLineElement, RenderableGraphLink, any, unknown>): void {
+  private updateLinkPositions(linkSelection: Selection<SVGLineElement, RenderableGraphLink, BaseType, unknown>): void {
     linkSelection
       .attr('x1', (item: RenderableGraphLink): number => getShortenedSourcePoint(item.link, item.style).x)
       .attr('y1', (item: RenderableGraphLink): number => getShortenedSourcePoint(item.link, item.style).y)
@@ -106,8 +106,8 @@ export class PerformanceTickManager {
    * Fast node position updates
    */
   private updateNodePositions(
-    nodeSelection: Selection<SVGCircleElement, GraphNode, any, unknown>,
-    labelSelection: Selection<SVGTextElement, GraphNode, any, unknown>
+    nodeSelection: Selection<SVGCircleElement, GraphNode, BaseType, unknown>,
+    labelSelection: Selection<SVGTextElement, GraphNode, BaseType, unknown>
   ): void {
     nodeSelection
       .attr('cx', (d: GraphNode) => d.x ?? 0)
@@ -121,7 +121,7 @@ export class PerformanceTickManager {
   /**
    * Optimized link label updates with caching and conditional updates
    */
-  private updateLinkLabels(linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, any, unknown>): void {
+  private updateLinkLabels(linkLabelSelection: Selection<SVGGElement, RenderableLinkLabel, BaseType, unknown>): void {
     let updateCount = 0;
 
     linkLabelSelection
