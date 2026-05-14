@@ -10,6 +10,11 @@
   display: block;
   width: 100%;
   height: 100%;
+  cursor: grab;
+}
+
+.pg-canvas:active {
+  cursor: grabbing;
 }
 
 .pg-overlay {
@@ -26,5 +31,6 @@
 }
 
 .pg-layer-links line {
+  cursor: pointer;
   transition: stroke-opacity 0.2s ease;
 }

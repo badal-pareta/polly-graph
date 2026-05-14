@@ -76,6 +76,9 @@ export async function captureAndDownloadGraph(container: HTMLElement, options: E
   svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   svgClone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
 
+  // Fix text styling for export
+  fixTextStyling(svgClone);
+
   // Serialize SVG to string
   const svgString = new XMLSerializer().serializeToString(svgClone);
   const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
@@ -279,6 +282,86 @@ function createLegendSVGElement(
   });
 
   return legendGroup;
+}
+
+function fixTextStyling(svgElement: SVGSVGElement): void {
+  // Fix node labels - these are text elements in the node-labels layer
+  const nodeLabelsLayer = svgElement.querySelector('[data-layer="node-labels"]');
+  if (nodeLabelsLayer) {
+    const nodeTexts = nodeLabelsLayer.querySelectorAll('text');
+    nodeTexts.forEach(text => {
+      const textElement = text as SVGTextElement;
+      textElement.setAttribute('font-family', 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
+
+      // Only set font-size if not already set
+      if (!textElement.getAttribute('font-size')) {
+        textElement.setAttribute('font-size', '9');
+      }
+
+      textElement.setAttribute('font-weight', '500');
+      textElement.setAttribute('text-anchor', 'middle');
+      textElement.setAttribute('dominant-baseline', 'central');
+
+      // Preserve existing fill color if set, otherwise use default
+      if (!textElement.getAttribute('fill')) {
+        textElement.setAttribute('fill', '#374151');
+      }
+    });
+  }
+
+  // Fix link labels - these are g.link-label groups with text and rect children
+  const linkLabels = svgElement.querySelectorAll('g.link-label');
+  linkLabels.forEach(labelGroup => {
+    const textElement = labelGroup.querySelector('text') as SVGTextElement;
+    if (textElement) {
+      textElement.setAttribute('font-family', 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
+
+      // Only set font-size if not already set
+      if (!textElement.getAttribute('font-size')) {
+        textElement.setAttribute('font-size', '10');
+      }
+
+      textElement.setAttribute('font-weight', '400');
+      textElement.setAttribute('text-anchor', 'middle');
+      textElement.setAttribute('dominant-baseline', 'central');
+
+      // Preserve existing fill color if set, otherwise use default
+      if (!textElement.getAttribute('fill')) {
+        textElement.setAttribute('fill', '#6b7280');
+      }
+    }
+
+    // Fix background rectangle if present
+    const rectElement = labelGroup.querySelector('rect') as SVGRectElement;
+    if (rectElement) {
+      if (!rectElement.getAttribute('fill')) {
+        rectElement.setAttribute('fill', '#ffffff');
+      }
+      if (!rectElement.getAttribute('stroke')) {
+        rectElement.setAttribute('stroke', '#e5e7eb');
+      }
+      if (!rectElement.getAttribute('stroke-width')) {
+        rectElement.setAttribute('stroke-width', '1');
+      }
+      rectElement.setAttribute('rx', '4');
+    }
+  });
+
+  // Fix any other text elements that might not have proper font styling
+  const allTexts = svgElement.querySelectorAll('text');
+  allTexts.forEach(text => {
+    const textElement = text as SVGTextElement;
+
+    // Only apply font-family if not already set
+    if (!textElement.getAttribute('font-family')) {
+      textElement.setAttribute('font-family', 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
+    }
+
+    // Ensure all text elements have a font-size (fallback to 10px)
+    if (!textElement.getAttribute('font-size')) {
+      textElement.setAttribute('font-size', '10');
+    }
+  });
 }
 
 function normalizeColor(color: string): string {
