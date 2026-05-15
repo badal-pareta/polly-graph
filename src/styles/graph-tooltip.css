@@ -1,11 +1,15 @@
+:root {
+  --dark-bg: color-mix(in srgb, #808080, #000000 20%);
+}
+
 .graph-tooltip {
   position: absolute;
   pointer-events: none;
   z-index: 1000;
   width: fit-content;
   max-width: 280px;
-  border-radius: 10px;
-  background: #0f172a;
+  border-radius: 0.375rem;
+  background: var(--dark-bg);
   color: #f8fafc;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
@@ -25,16 +29,16 @@
 .graph-tooltip__content {
   position: relative;
   z-index: 2;
-  padding: 10px 14px;
+  padding: 0.375rem 0.5rem;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
 
 .graph-tooltip__arrow {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  background: #0f172a;
+  width: 0.625rem;
+  height: 0.625rem;
+  background: var(--dark-bg);
   transform: rotate(45deg);
   z-index: 1;
 }

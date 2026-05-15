@@ -9,6 +9,7 @@ import { bindNodeTooltip } from '../interactions/bind-node-tooltip';
 import { createLinkHitArea } from '../utils/node-link-selection.utils';
 import { PerformanceTickManager } from '../utils/performance-tick-manager';
 import { SelectionManager } from '../utils/selection-manager';
+import { resolveNodeStyle } from '../utils/resolve-node-style';
 
 import { RenderableGraphLink } from '../renderer/links';
 import { RenderableLinkLabel } from '../renderer/link-labels';
@@ -89,8 +90,13 @@ export class InteractionManager {
         });
       }
 
-      // Setup hover styles
-      createNodeHover(selections.nodeSelection, this.manager.config.interaction.hover.nodeStyle);
+      // Setup hover styles with defaults
+      const defaultNodeHoverStyle = resolveNodeStyle({
+        node: {} as GraphNode, // We don't need the actual node for defaults
+        interaction: this.manager.config.interaction,
+        isHovered: true
+      });
+      createNodeHover(selections.nodeSelection, defaultNodeHoverStyle);
       createLinkHover(selections.linkSelection, this.manager.config.interaction.hover.linkStyle);
     }
   }

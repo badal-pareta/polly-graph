@@ -132,13 +132,16 @@ export class RenderPipeline {
         }
       }
 
-      // Call fitView with debounce after resize
+      // Call fitView with debounce after resize with extra delay for DOM layout
       if (this.manager.timerManager && this.manager.fitViewCallback) {
         this.manager.timerManager.debounce('fit-view-resize', () => {
-          if (this.manager.fitViewCallback) {
-            this.manager.fitViewCallback();
-          }
-        }, 150);
+          // Add small delay to ensure DOM layout is complete after resize
+          this.manager.timerManager!.setTimeout('fit-view-layout', () => {
+            if (this.manager.fitViewCallback) {
+              this.manager.fitViewCallback();
+            }
+          }, 50);
+        }, 200);
       }
 
     });
@@ -246,7 +249,18 @@ export class RenderPipeline {
     //   this.manager.config.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
 
     try {
-      const simulationResult = createGraphSimulation(simulationConfig);
+      const simulationConfigWithCallback: SimulationConfig = {
+        ...simulationConfig,
+        onReady: () => {
+          // Trigger fit view when simulation is ready instead of using flag
+          if (this.manager.fitViewCallback) {
+            this.manager.fitViewCallback();
+          }
+        },
+        timerManager: this.manager.timerManager ?? undefined
+      };
+
+      const simulationResult = createGraphSimulation(simulationConfigWithCallback);
       this.manager.simulation = simulationResult.simulation;
 
       // Debug: Check node positions after simulation creation
@@ -259,13 +273,9 @@ export class RenderPipeline {
 
 
       // Only start simulation if container has valid dimensions
-      if (simulationConfig.width > 0 && simulationConfig.height > 0) {
+      if (simulationConfigWithCallback.width > 0 && simulationConfigWithCallback.height > 0) {
         this.manager.reheatSimulation(0.3);
         this.manager.simulationPaused = false;
-
-        // Signal that we need immediate fitView after render completes
-        this.manager.needsImmediateFitView = true;
-
       } else {
         this.manager.simulation.stop();
         this.manager.simulationPaused = true;

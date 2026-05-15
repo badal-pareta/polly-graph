@@ -208,6 +208,32 @@ export function createGraphSimulation(
     warmupSimulation(simulation, warmupTicks);
   }
 
+  // Add callback for when simulation stabilizes
+  if (config.onReady && config.timerManager) {
+    let readyCallbackFired = false;
+
+    const handleTick = () => {
+      // Call onReady when simulation has low alpha (stabilized)
+      if (!readyCallbackFired && simulation.alpha() < 0.1) {
+        readyCallbackFired = true;
+        simulation.on('tick.ready', null); // Clean up listener
+
+        // Use TimerManager for proper cleanup
+        config.timerManager!.setTimeout('simulation-ready', () => {
+          config.onReady?.();
+        }, 100);
+      }
+    };
+
+    const cleanup = () => {
+      simulation.on('tick.ready', null);
+      config.timerManager!.clearTimer('simulation-ready');
+    };
+
+    simulation.on('tick.ready', handleTick);
+    simulation.on('end.ready', cleanup); // Clean up on simulation end
+  }
+
   return { simulation };
 }
 

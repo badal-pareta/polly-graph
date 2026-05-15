@@ -53,7 +53,6 @@ export class GraphManager {
   public linkMarkerSnapshots: Map<SVGLineElement, string | null> | null = null;
   public rootSelection: Selection<SVGGElement, unknown, null, undefined> | null = null;
   public simulationPaused: boolean = false;
-  public needsImmediateFitView: boolean = false;
 
   constructor(public readonly config: GraphConfig) {
   }
@@ -124,7 +123,6 @@ export class GraphManager {
     this.linkMarkerSnapshots = null;
     this.rootSelection = null;
     this.simulationPaused = false;
-    this.needsImmediateFitView = false;
     this.cleanupFunctions = [];
   }
 

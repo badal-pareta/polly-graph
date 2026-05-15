@@ -1,5 +1,6 @@
 import { Simulation } from 'd3-force';
 import { GraphNode, GraphLink } from './graph.types';
+import { TimerManager } from '../utils/timer-manager';
 
 export interface LinkForceConfig {
   readonly enabled?: boolean;
@@ -87,6 +88,8 @@ export interface SimulationConfig {
   readonly width: number;
   readonly height: number;
   readonly config?: EnhancedSimulationConfig;
+  readonly onReady?: VoidFunction;
+  readonly timerManager?: TimerManager;
 }
 
 export interface SimulationResult {

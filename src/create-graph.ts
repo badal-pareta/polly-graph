@@ -2,7 +2,6 @@
 import 'd3-transition';
 import { zoomIdentity } from 'd3-zoom';
 import { select } from 'd3-selection';
-import { extent } from 'd3';
 
 // Core modules
 import { GraphManager } from './core/graph-manager';
@@ -18,7 +17,7 @@ import { GraphValidator, GraphValidationError } from './utils/validation';
 // Types
 import { GraphConfig } from './contracts/graph-config.interface';
 import { GraphInstance } from './contracts/graph-instance.interface';
-import { GraphNode, GraphLink, GraphNodeWithInitial } from './contracts/graph.types';
+import { GraphNode, GraphLink } from './contracts/graph.types';
 import { GraphEventMap } from './utils/event-emitter';
 
 /**
@@ -67,10 +66,6 @@ export function createGraph(config: GraphConfig): GraphInstance {
         setupAdditionalComponents();
 
         // Check if we need immediate fitView after initial positioning
-        if (graphManager.needsImmediateFitView) {
-          graphManager.needsImmediateFitView = false;
-          fitViewWithInitialPositions();
-        }
 
       }).catch(error => {
         console.error('[Polly Graph] Render failed:', error);
@@ -177,98 +172,50 @@ export function createGraph(config: GraphConfig): GraphInstance {
 
     if (nodes.length === 0) return;
 
-    // Calculate bounding box of nodes
-    const positions = nodes.map(node => ({
-      x: node.x ?? 0,
-      y: node.y ?? 0
-    }));
+    // Get DOM-based bounds using getBBox() for accurate calculation
+    const graphRoot = select(svg).select('[data-layer="viewport"]');
+    const graphRootNode = graphRoot.node() as SVGGElement;
 
-
-    // Calculate node bounds for fit view
-
-    const xExtent = extent(positions, (d: {x: number, y: number}) => d.x) as [number, number];
-    const yExtent = extent(positions, (d: {x: number, y: number}) => d.y) as [number, number];
-
-
-    const padding = 50;
-    const width = graphManager.dimensions.width - padding * 2;
-    const height = graphManager.dimensions.height - padding * 2;
-
-    const nodeWidth = xExtent[1] - xExtent[0];
-    const nodeHeight = yExtent[1] - yExtent[0];
-
-    if (nodeWidth === 0 || nodeHeight === 0) {
+    if (!graphRootNode) {
+      console.warn('[Polly Graph] Cannot fit view: graph root not found');
       return;
     }
 
-    const scale = Math.min(width / nodeWidth, height / nodeHeight, 3); // Max scale of 3x
-    const centerX = (xExtent[0] + xExtent[1]) / 2;
-    const centerY = (yExtent[0] + yExtent[1]) / 2;
+    let bounds: DOMRect;
+    try {
+      bounds = graphRootNode.getBBox();
+    } catch {
+      console.warn('[Polly Graph] Cannot get bounds, falling back to default view');
+      return;
+    }
+
+    // Skip if bounds are invalid
+    if (bounds.width === 0 || bounds.height === 0) {
+      return;
+    }
+
+    const svgRect = svg.getBoundingClientRect();
+    const padding = 40;
+    const availableWidth = svgRect.width - padding * 2;
+    const availableHeight = svgRect.height - padding * 2;
+
+    const scaleX = availableWidth / bounds.width;
+    const scaleY = availableHeight / bounds.height;
+    const scale = Math.min(scaleX, scaleY, 4); // Max scale of 4x
+
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
 
 
     const transform = zoomIdentity
-      .translate(graphManager.dimensions.width / 2, graphManager.dimensions.height / 2)
+      .translate(svgRect.width / 2, svgRect.height / 2)
       .scale(scale)
       .translate(-centerX, -centerY);
 
     if (graphManager.zoomBehavior) {
       select(svg)
         .transition()
-        .duration(400)
-        .call(graphManager.zoomBehavior.transform, transform);
-    }
-  }
-
-  function fitViewWithInitialPositions(): void {
-
-    if (!graphManager.simulation || !graphManager.svgElement) {
-      console.warn('[Polly Graph] Cannot fit view: simulation or SVG not available');
-      return;
-    }
-
-    const svg = graphManager.svgElement;
-    const nodes = config.nodes;
-
-    if (nodes.length === 0) return;
-
-    // Use stored initial positions instead of current positions
-    const positions = nodes.map((node: GraphNodeWithInitial) => ({
-      x: node.initialX ?? node.x ?? 0,
-      y: node.initialY ?? node.y ?? 0
-    }));
-
-
-    // Calculate bounds using initial positions
-
-    const xExtent = extent(positions, (d: {x: number, y: number}) => d.x) as [number, number];
-    const yExtent = extent(positions, (d: {x: number, y: number}) => d.y) as [number, number];
-
-
-    const padding = 50;
-    const width = graphManager.dimensions.width - padding * 2;
-    const height = graphManager.dimensions.height - padding * 2;
-
-    const nodeWidth = xExtent[1] - xExtent[0];
-    const nodeHeight = yExtent[1] - yExtent[0];
-
-    if (nodeWidth === 0 || nodeHeight === 0) {
-      return;
-    }
-
-    const scale = Math.min(width / nodeWidth, height / nodeHeight, 3); // Max scale of 3x
-    const centerX = (xExtent[0] + xExtent[1]) / 2;
-    const centerY = (yExtent[0] + yExtent[1]) / 2;
-
-
-    const transform = zoomIdentity
-      .translate(graphManager.dimensions.width / 2, graphManager.dimensions.height / 2)
-      .scale(scale)
-      .translate(-centerX, -centerY);
-
-    if (graphManager.zoomBehavior) {
-      select(svg)
-        .transition()
-        .duration(400)
+        .duration(750)
         .call(graphManager.zoomBehavior.transform, transform);
     }
   }
