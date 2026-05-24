@@ -1,5 +1,9 @@
 # polly-graph
 
+[![npm version](https://img.shields.io/npm/v/polly-graph)](https://www.npmjs.com/package/polly-graph)
+[![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A framework-independent TypeScript-based D3 graph visualization SDK that provides a comprehensive, reusable solution for creating interactive network graphs. Designed to work seamlessly across React, Angular, Vue, Svelte, or vanilla JavaScript applications.
 
 ## Features
