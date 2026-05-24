@@ -79,7 +79,7 @@ export class SelectionManager {
       if (style.stroke !== undefined) nodeElement.style.stroke = style.stroke;
       if (style.strokeWidth !== undefined) nodeElement.style.strokeWidth = String(style.strokeWidth);
       if (style.opacity !== undefined) nodeElement.style.opacity = String(style.opacity);
-      if (style.radius !== undefined) nodeElement.style.setProperty('r', String(style.radius));
+      if (style.radius !== undefined) nodeElement.setAttribute('r', String(style.radius));
     }
 
     // Show related link labels on hover visibility
@@ -185,7 +185,10 @@ export class SelectionManager {
     element.style.stroke = '';
     element.style.strokeWidth = '';
     element.style.opacity = '';
-    element.style.removeProperty('r');
+
+    // Reset radius to node's original radius or default
+    const originalRadius = data.style?.radius ?? 8;
+    element.setAttribute('r', String(originalRadius));
 
     // Clear selected marker
     delete element.dataset.selected;

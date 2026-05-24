@@ -129,9 +129,8 @@ async function loadGraph(graphSize: GraphSize): Promise<void> {
           `
         },
         nodeStyle: {
-          stroke: '#16a34a',
           strokeWidth: 3,
-          opacity: 1
+          // Should get purple stroke from smart merge
         },
         linkStyle: {
           stroke: '#f59e0b',
@@ -142,6 +141,7 @@ async function loadGraph(graphSize: GraphSize): Promise<void> {
       selection: {
         enabled: true,
         nodeStyle: {
+          radius: 25,  // Test radius expansion
           stroke: '#f59e0b',
           strokeWidth: 4
         },

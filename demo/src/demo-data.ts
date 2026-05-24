@@ -27,9 +27,8 @@ export const demoInteractionConfig: GraphInteractionConfig = {
     },
 
     nodeStyle: {
-      stroke: '#16a34a',
       strokeWidth: 3,
-      opacity: 1,
+      // Should get purple from smart merge, but getting green - debug needed
     },
 
     linkStyle: {
@@ -44,6 +43,7 @@ export const demoInteractionConfig: GraphInteractionConfig = {
     multiSelect: false,
 
     nodeStyle: {
+      radius: 25,  // Test radius expansion - nodes should grow when selected
       stroke: '#f59e0b',
       strokeWidth: 4,
       opacity: 1,
