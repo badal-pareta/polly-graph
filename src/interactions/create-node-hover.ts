@@ -21,15 +21,45 @@ export function createNodeHover(
     nodeSelection
       .on('mouseenter.hover', function (_event: MouseEvent, node: GraphNode): void {
         const circle = this as SVGCircleElement;
+
+        // Don't apply hover styles if node is selected
+        if (circle.dataset.selected === 'true') {
+          return;
+        }
+
         circle.setAttribute('stroke', hoverStyle.stroke ?? node.style?.stroke ?? '#ffffff');
         circle.setAttribute('stroke-width', String(hoverStyle.strokeWidth ?? node.style?.strokeWidth ?? 1.5));
         circle.setAttribute('opacity', String(hoverStyle.opacity ?? node.style?.opacity ?? 1));
       })
       .on('mouseleave.hover', function (_event: MouseEvent, node: GraphNode): void {
         const circle = this as SVGCircleElement;
-        circle.setAttribute('stroke', node.style?.stroke ?? '#ffffff');
-        circle.setAttribute('stroke-width', String(node.style?.strokeWidth ?? 1.5));
-        circle.setAttribute('opacity', String(node.style?.opacity ?? 1));
+
+        // Only reset hover styles if not selected (to prevent interfering with selection styles)
+        if (circle.dataset.selected === 'true') {
+          return;
+        }
+
+        // Reset to original styles or remove inline styles to fall back to CSS
+        circle.style.stroke = '';
+        circle.style.strokeWidth = '';
+        circle.style.opacity = '';
+
+        // Set default attributes if node doesn't have custom styles
+        if (!node.style?.stroke) {
+          circle.setAttribute('stroke', '#ffffff');
+        } else {
+          circle.setAttribute('stroke', node.style.stroke);
+        }
+        if (!node.style?.strokeWidth) {
+          circle.setAttribute('stroke-width', '1.5');
+        } else {
+          circle.setAttribute('stroke-width', String(node.style.strokeWidth));
+        }
+        if (!node.style?.opacity) {
+          circle.setAttribute('opacity', '1');
+        } else {
+          circle.setAttribute('opacity', String(node.style.opacity));
+        }
       });
   }
 

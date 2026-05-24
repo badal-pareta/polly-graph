@@ -11,6 +11,7 @@ import { SelectionInteractionConfig } from '../contracts/graph-config.interface'
 import { GraphLayers } from '../contracts/graph-layers.interface';
 import { createArrowMarker } from '../core/create-arrow-marker';
 import { RenderableGraphLink } from '../renderer/links';
+import { NodeTooltipBinding } from '../interactions/bind-node-tooltip';
 
 export interface SelectionState {
   selectedNode: {
@@ -35,25 +36,33 @@ export class SelectionManager {
   private readonly layers: GraphLayers;
   private readonly linkMarkerSnapshots: Map<SVGLineElement, string | null>;
   private readonly root: Selection<SVGGElement, unknown, null, undefined>;
+  private readonly tooltipBinding?: NodeTooltipBinding;
 
   constructor(
     eventEmitter: TypedGraphEventEmitter,
     config: SelectionInteractionConfig,
     layers: GraphLayers,
     linkMarkerSnapshots: Map<SVGLineElement, string | null>,
-    root: Selection<SVGGElement, unknown, null, undefined>
+    root: Selection<SVGGElement, unknown, null, undefined>,
+    tooltipBinding?: NodeTooltipBinding
   ) {
     this.eventEmitter = eventEmitter;
     this.config = config;
     this.layers = layers;
     this.linkMarkerSnapshots = linkMarkerSnapshots;
     this.root = root;
+    this.tooltipBinding = tooltipBinding;
   }
 
   /**
    * Select a node, automatically deselecting any current selection
    */
   selectNode(nodeElement: SVGCircleElement, nodeData: GraphNode): void {
+    // Hide any active tooltips
+    if (this.tooltipBinding) {
+      this.tooltipBinding.hide();
+    }
+
     // Clear hover state first to prevent layer conflicts
     this.clearHoverState();
 

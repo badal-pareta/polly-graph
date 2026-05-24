@@ -52,7 +52,11 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "version:prerelease": "npm version prerelease"
   },
   "dependencies": {
     "d3": "7.9.0"

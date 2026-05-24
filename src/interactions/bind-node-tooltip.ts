@@ -12,13 +12,15 @@ interface BindNodeTooltipParams {
 export interface NodeTooltipBinding {
   destroy(): void;
   reposition(): void;
+  hide(): void;
 }
 
 export function bindNodeTooltip(params: BindNodeTooltipParams): NodeTooltipBinding {
   if (!params.tooltipConfig?.enabled) {
     return {
       destroy: (): void => {},
-      reposition: (): void => {}
+      reposition: (): void => {},
+      hide: (): void => {}
     };
   }
 
@@ -30,6 +32,12 @@ export function bindNodeTooltip(params: BindNodeTooltipParams): NodeTooltipBindi
     .on( 'mouseenter.tooltip',
       function (event: MouseEvent, node: GraphNode): void {
         const target: SVGCircleElement = this as SVGCircleElement;
+
+        // Don't show tooltip if node is selected
+        if (target.dataset.selected === 'true') {
+          return;
+        }
+
         activeTarget = target;
         const customContent: string | undefined = params.tooltipConfig?.renderContent?.(node);
         const content: string = customContent ?? getDefaultContent(node);
@@ -39,6 +47,14 @@ export function bindNodeTooltip(params: BindNodeTooltipParams): NodeTooltipBindi
     .on('mousemove.tooltip',
       function (): void {
         const target: SVGCircleElement = this as SVGCircleElement;
+
+        // Hide tooltip if node becomes selected during hover
+        if (target.dataset.selected === 'true') {
+          activeTarget = null;
+          tooltip.hide();
+          return;
+        }
+
         activeTarget = target;
         tooltip.move(target);
       }
@@ -55,13 +71,18 @@ export function bindNodeTooltip(params: BindNodeTooltipParams): NodeTooltipBindi
     tooltip.move(activeTarget);
   }
 
+  function hide(): void {
+    activeTarget = null;
+    tooltip.hide();
+  }
+
   function destroy(): void {
     activeTarget = null;
     params.selection.on('.tooltip', null);
     tooltip.destroy();
   }
 
-  return { destroy, reposition };
+  return { destroy, reposition, hide };
 }
 
 function getDefaultContent(node: GraphNode): string {

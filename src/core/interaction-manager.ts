@@ -147,7 +147,8 @@ export class InteractionManager {
         this.manager.config.interaction.selection,
         this.manager.layers,
         this.manager.linkMarkerSnapshots,
-        this.manager.rootSelection
+        this.manager.rootSelection,
+        this.manager.tooltipBinding || undefined
       );
 
       // Setup selection event handlers
