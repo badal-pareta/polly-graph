@@ -2,7 +2,6 @@ import { Selection, BaseType, select } from 'd3-selection';
 import { GraphNode, NodeStyle } from '../contracts/graph.types';
 import { RenderableGraphLink } from '../renderer/links';
 import { RenderableLinkLabel } from '../renderer/link-labels';
-import { applyHoverStyles, removeHoverStyles } from '../utils/node-style-manager';
 
 /**
  * Enhanced Node Hover Interaction
@@ -20,13 +19,40 @@ export function createNodeHover(
   // 1. Logic for Node Circle Visuals
   if (hoverStyle) {
     nodeSelection
-      .on('mouseenter.hover', function (_event: MouseEvent, node: GraphNode): void {
+      .on('mouseenter.hover', function (_event: MouseEvent, _node: GraphNode): void {
         const circle = this as SVGCircleElement;
-        applyHoverStyles(circle, node, hoverStyle);
+
+        // Don't apply hover styles if node is selected
+        if (circle.dataset.selected === 'true') {
+          return;
+        }
+
+        // Apply hover styles
+        if (hoverStyle.stroke !== undefined) {
+          circle.style.stroke = hoverStyle.stroke;
+        }
+        if (hoverStyle.strokeWidth !== undefined) {
+          circle.style.strokeWidth = String(hoverStyle.strokeWidth);
+        }
+        if (hoverStyle.opacity !== undefined) {
+          circle.style.opacity = String(hoverStyle.opacity);
+        }
       })
-      .on('mouseleave.hover', function (_event: MouseEvent, node: GraphNode): void {
+      .on('mouseleave.hover', function (_event: MouseEvent, _node: GraphNode): void {
         const circle = this as SVGCircleElement;
-        removeHoverStyles(circle, node);
+
+        // Always clear all hover layers first (fixes stuck hover states)
+        clearAllHoverLayers();
+
+        // Only reset hover styles if not selected
+        if (circle.dataset.selected === 'true') {
+          return;
+        }
+
+        // Clear inline styles to let CSS/attributes take over
+        circle.style.stroke = '';
+        circle.style.strokeWidth = '';
+        circle.style.opacity = '';
       });
   }
 

@@ -10,8 +10,18 @@ export function renderNodes(ctx: GraphRenderContext, nodes: GraphNode[]): Select
     .join('circle')
     .attr('r', (node: GraphNode) => node.style?.radius ?? 8)
     .attr('fill', (node: GraphNode) => node.style?.fill ?? '#6c5ce7')
-    .attr('stroke', (node: GraphNode) => node.style?.stroke ?? '#ffffff')
-    .attr('stroke-width', (node: GraphNode) => node.style?.strokeWidth ?? 1.5)
+    .call(selection => {
+      // Only set stroke attributes if node has custom stroke styling
+      selection.each(function(node) {
+        const element = this as SVGCircleElement;
+        if (node.style?.stroke !== undefined) {
+          element.setAttribute('stroke', node.style.stroke);
+        }
+        if (node.style?.strokeWidth !== undefined) {
+          element.setAttribute('stroke-width', String(node.style.strokeWidth));
+        }
+      });
+    })
     .attr('opacity', (node: GraphNode) => node.style?.opacity ?? 1)
     .style('cursor', 'pointer');
 }

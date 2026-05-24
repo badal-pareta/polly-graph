@@ -12,7 +12,6 @@ import { GraphLayers } from '../contracts/graph-layers.interface';
 import { createArrowMarker } from '../core/create-arrow-marker';
 import { RenderableGraphLink } from '../renderer/links';
 import { NodeTooltipBinding } from '../interactions/bind-node-tooltip';
-import { applySelectionStyles, removeSelectionStyles } from './node-style-manager';
 
 export interface SelectionState {
   selectedNode: {
@@ -73,9 +72,14 @@ export class SelectionManager {
     // Bring node and related elements to front
     this.bringNodeToFront(nodeElement, nodeData);
 
-    // Apply node selection styles using style manager
+    // Apply node selection styles
     if (this.config.nodeStyle) {
-      applySelectionStyles(nodeElement, nodeData, this.config.nodeStyle);
+      const style = this.config.nodeStyle;
+      if (style.fill !== undefined) nodeElement.style.fill = style.fill;
+      if (style.stroke !== undefined) nodeElement.style.stroke = style.stroke;
+      if (style.strokeWidth !== undefined) nodeElement.style.strokeWidth = String(style.strokeWidth);
+      if (style.opacity !== undefined) nodeElement.style.opacity = String(style.opacity);
+      if (style.radius !== undefined) nodeElement.style.setProperty('r', String(style.radius));
     }
 
     // Show related link labels on hover visibility
@@ -176,8 +180,15 @@ export class SelectionManager {
     // Restore elements to their original layers
     this.restoreSelectedElements(data);
 
-    // Reset styles using style manager
-    removeSelectionStyles(element, data);
+    // Reset styles
+    element.style.fill = '';
+    element.style.stroke = '';
+    element.style.strokeWidth = '';
+    element.style.opacity = '';
+    element.style.removeProperty('r');
+
+    // Clear selected marker
+    delete element.dataset.selected;
 
     // Hide pinned link labels
     this.root
