@@ -2,57 +2,96 @@ import { Selection, BaseType, select } from 'd3-selection';
 import { GraphNode, NodeStyle } from '../contracts/graph.types';
 import { RenderableGraphLink } from '../renderer/links';
 import { RenderableLinkLabel } from '../renderer/link-labels';
+import { applyHoverStyles, removeHoverStyles } from '../utils/node-style-manager';
+import { TimerManager } from '../utils/timer-manager';
 
 /**
  * Enhanced Node Hover Interaction
- * Handles circle style changes and triggers hover states for connected links.
- * Connected links are moved to dedicated hover layer maintaining proper visual hierarchy.
+ * Uses single-hover-state management to eliminate ghost hover effects.
+ * Only one node can be hovered at a time, ensuring clean state transitions.
  */
+
+// Global hover state - only one node can be hovered at a time
+let currentHoveredNode: { element: SVGCircleElement, node: GraphNode } | null = null;
+
+// Timer manager for optional debouncing of rapid state changes
+const hoverTimerManager = new TimerManager();
+
 export function createNodeHover(
   nodeSelection: Selection<SVGCircleElement, GraphNode, BaseType, unknown>,
-  hoverStyle?: Partial<NodeStyle>
+  hoverStyle?: Partial<NodeStyle>,
+  options?: {
+    /** Enable debouncing for very rapid mouse movements (default: false) */
+    enableDebouncing?: boolean;
+    /** Debounce delay in ms for enter (default: 16ms ~1 frame) */
+    enterDelay?: number;
+    /** Debounce delay in ms for leave (default: 50ms) */
+    leaveDelay?: number;
+  }
 ): void {
   // Guard clause for empty selections
   const firstNode = nodeSelection.node();
   if (!firstNode) return;
 
-  // 1. Logic for Node Circle Visuals
+  // Extract options with defaults
+  const {
+    enableDebouncing = false,
+    enterDelay = 16, // ~1 frame at 60fps
+    leaveDelay = 50  // Longer delay for smoother transitions
+  } = options || {};
+
+  // 1. Single-hover-state management for clean state transitions
   if (hoverStyle) {
     nodeSelection
-      .on('mouseenter.hover', function (_event: MouseEvent, _node: GraphNode): void {
+      .on('mouseenter.hover', function (_event: MouseEvent, node: GraphNode): void {
         const circle = this as SVGCircleElement;
 
-        // Don't apply hover styles if node is selected
-        if (circle.dataset.selected === 'true') {
-          return;
-        }
+        const applyHover = () => {
+          // Clear any existing hover state immediately before applying new one
+          if (currentHoveredNode && currentHoveredNode.element !== circle) {
+            removeHoverStyles(currentHoveredNode.element, currentHoveredNode.node);
+            clearAllHoverLayers();
+          }
 
-        // Apply hover styles
-        if (hoverStyle.stroke !== undefined) {
-          circle.style.stroke = hoverStyle.stroke;
-        }
-        if (hoverStyle.strokeWidth !== undefined) {
-          circle.style.strokeWidth = String(hoverStyle.strokeWidth);
-        }
-        if (hoverStyle.opacity !== undefined) {
-          circle.style.opacity = String(hoverStyle.opacity);
+          // Set new hover state
+          currentHoveredNode = { element: circle, node };
+          applyHoverStyles(circle, node, hoverStyle);
+        };
+
+        if (enableDebouncing) {
+          // Clear any pending operations
+          hoverTimerManager.clearTimer('hover-enter');
+          hoverTimerManager.clearTimer('hover-leave');
+
+          // Debounced hover application
+          hoverTimerManager.debounce('hover-enter', applyHover, enterDelay);
+        } else {
+          // Immediate hover application (default behavior)
+          applyHover();
         }
       })
-      .on('mouseleave.hover', function (_event: MouseEvent, _node: GraphNode): void {
+      .on('mouseleave.hover', function (_event: MouseEvent, node: GraphNode): void {
         const circle = this as SVGCircleElement;
 
-        // Always clear all hover layers first (fixes stuck hover states)
-        clearAllHoverLayers();
+        const removeHover = () => {
+          // Only clear if this is the currently hovered node
+          if (currentHoveredNode?.element === circle) {
+            currentHoveredNode = null;
+            removeHoverStyles(circle, node);
+            clearAllHoverLayers();
+          }
+        };
 
-        // Only reset hover styles if not selected
-        if (circle.dataset.selected === 'true') {
-          return;
+        if (enableDebouncing) {
+          // Clear any pending enter operation
+          hoverTimerManager.clearTimer('hover-enter');
+
+          // Debounced hover removal
+          hoverTimerManager.debounce('hover-leave', removeHover, leaveDelay);
+        } else {
+          // Immediate hover removal (default behavior)
+          removeHover();
         }
-
-        // Clear inline styles to let CSS/attributes take over
-        circle.style.stroke = '';
-        circle.style.strokeWidth = '';
-        circle.style.opacity = '';
       });
   }
 
@@ -134,6 +173,11 @@ export function createNodeHover(
         return;
       }
 
+      // Only proceed if this is the currently hovered node (prevents conflicts)
+      if (!currentHoveredNode || currentHoveredNode.element !== hoveredNodeElement) {
+        return;
+      }
+
       // Clear any previous hover state before applying new one
       clearAllHoverLayers();
 
@@ -202,7 +246,34 @@ export function createNodeHover(
         });
     })
     .on('mouseleave.links', function(_event, _hoveredNode: GraphNode) {
-      // Clear all hover state when leaving any node
-      clearAllHoverLayers();
+      const hoveredNodeElement = this as SVGCircleElement;
+
+      // Only clear if this is the currently hovered node
+      if (currentHoveredNode?.element === hoveredNodeElement) {
+        clearAllHoverLayers();
+      }
     });
+}
+
+/**
+ * Clear all hover states - useful for cleanup or when graph is updated
+ */
+export function clearAllNodeHoverStates(): void {
+  // Clear any pending timer operations
+  hoverTimerManager.clearTimer('hover-enter');
+  hoverTimerManager.clearTimer('hover-leave');
+
+  // Clear current hover state
+  if (currentHoveredNode) {
+    removeHoverStyles(currentHoveredNode.element, currentHoveredNode.node);
+    currentHoveredNode = null;
+  }
+}
+
+/**
+ * Destroy hover manager - cleans up all resources
+ */
+export function destroyNodeHoverManager(): void {
+  clearAllNodeHoverStates();
+  hoverTimerManager.destroy();
 }
