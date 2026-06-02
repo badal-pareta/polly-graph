@@ -48,13 +48,10 @@ export function renderLinkLabels(params: GraphRenderContext, links: GraphLink[])
     })
     /**
      * Managed Interaction State:
-     * When opacity is 0, we must set pointer-events to 'none' so these
-     * "ghost" elements don't block interaction with nodes/links underneath.
+     * Link labels should not handle pointer events - let hit areas handle all interactions
+     * to prevent race conditions between link hover and label hover
      */
-    .style('pointer-events', (item: RenderableLinkLabel): string => {
-      const visibility = item.style.label.visibility ?? 'always';
-      return visibility === 'always' ? 'auto' : 'none';
-    })
+    .style('pointer-events', 'none')
     /**
      * Cursor state is only active when pointer-events are 'auto'.
      */

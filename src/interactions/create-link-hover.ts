@@ -8,8 +8,8 @@ import { createArrowMarker } from '../core/create-arrow-marker';
  * Enhanced Link Hover Interaction
  * Handles link style changes and ensures link labels are visible on hover.
  */
-export function createLinkHover(
-  linkSelection: Selection<SVGLineElement, RenderableGraphLink, BaseType, unknown>,
+export function createLinkHover<T extends SVGElement>(
+  linkSelection: Selection<T, RenderableGraphLink, BaseType, unknown>,
   hoverStyle?: Partial<LinkStyle>
 ): void {
   // Guard clause for empty selections
@@ -67,7 +67,7 @@ export function createLinkHover(
    */
   linkSelection
     .on('mouseenter.hover', function (_event: MouseEvent, renderableLink: RenderableGraphLink): void {
-      const hoveredElement = this as SVGLineElement;
+      const hoveredElement = this as SVGElement;
 
       // Clear any previous hover states before applying new one
       clearAllHoverStates();
@@ -80,7 +80,7 @@ export function createLinkHover(
         if (!visibleLinkNode) return;
         targetLinkElement = visibleLinkNode;
       } else {
-        targetLinkElement = hoveredElement;
+        targetLinkElement = hoveredElement as SVGLineElement;
       }
 
       // Apply hover styles (no need to mark with data attributes)
@@ -117,11 +117,10 @@ export function createLinkHover(
       const labelSelection = root.select('[data-layer="link-labels"]').selectAll<SVGGElement, RenderableLinkLabel>('.link-label');
       labelSelection
         .filter(item => item.link === renderableLink.link && item.style.label.visibility === 'hover')
-        .style('opacity', 1)
-        .style('pointer-events', 'auto');
+        .style('opacity', 1);
     })
     .on('mouseleave.hover', function (_event: MouseEvent, renderableLink: RenderableGraphLink): void {
-      const hoveredElement = this as SVGLineElement;
+      const hoveredElement = this as SVGElement;
 
       // If this is a hit area, find the corresponding visible link element
       let targetLinkElement: SVGLineElement;
@@ -131,7 +130,7 @@ export function createLinkHover(
         if (!visibleLinkNode) return;
         targetLinkElement = visibleLinkNode;
       } else {
-        targetLinkElement = hoveredElement;
+        targetLinkElement = hoveredElement as SVGLineElement;
       }
 
       // Reset hover styles (no data attributes to clean up)

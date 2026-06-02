@@ -224,14 +224,28 @@ export class InteractionManager {
         createLinkHover(linkHitAreaSelection, this.manager.config.interaction.hover.linkStyle);
       }
 
-      // Setup tick handler for hit areas
+      // Setup tick handler for hit areas (now rectangles)
       if (this.manager.simulation) {
         this.manager.simulation.on('tick.hitarea', (): void => {
           linkHitAreaSelection
-            .attr('x1', (item: RenderableGraphLink): number => (item.link.source as GraphNode).x ?? 0)
-            .attr('y1', (item: RenderableGraphLink): number => (item.link.source as GraphNode).y ?? 0)
-            .attr('x2', (item: RenderableGraphLink): number => (item.link.target as GraphNode).x ?? 0)
-            .attr('y2', (item: RenderableGraphLink): number => (item.link.target as GraphNode).y ?? 0);
+            .each(function(item: RenderableGraphLink) {
+              const source = item.link.source as GraphNode;
+              const target = item.link.target as GraphNode;
+
+              if (!source.x || !source.y || !target.x || !target.y) return;
+
+              const rectElement = this as SVGRectElement;
+              const midX = (source.x + target.x) / 2;
+              const midY = (source.y + target.y) / 2;
+
+              // Get current width/height to maintain them
+              const width = parseFloat(rectElement.getAttribute('width') || '20');
+              const height = parseFloat(rectElement.getAttribute('height') || '20');
+
+              // Update position while maintaining dimensions
+              rectElement.setAttribute('x', String(midX - width / 2));
+              rectElement.setAttribute('y', String(midY - height / 2));
+            });
         });
       }
 
