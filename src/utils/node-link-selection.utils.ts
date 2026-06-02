@@ -160,16 +160,24 @@ function updateHitAreaDimensions(
 
   if (!source.x || !source.y || !target.x || !target.y) return;
 
+  // Calculate link vector and length
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const linkLength = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+
   // Calculate link midpoint (where label will be positioned)
   const midX = (source.x + target.x) / 2;
   const midY = (source.y + target.y) / 2;
 
-  // Default dimensions based on link stroke width
-  const linkPadding = Math.max(item.style.strokeWidth || 2, item.style.arrow.size) * 2;
-  let width = linkPadding;
-  let height = linkPadding;
+  // Default thickness based on link stroke width and arrow size
+  const thickness = Math.max((item.style.strokeWidth || 2) * 4, item.style.arrow.size * 2, 20);
 
-  // Try to get label dimensions if label exists
+  // For length, use full link length plus arrow size to ensure arrowhead is covered
+  let length = linkLength + (item.style.arrow.size * 2);
+  let width = thickness;
+
+  // Try to get label dimensions if label exists and adjust width accordingly
   if (item.link.label) {
     const labelElement = root.select('[data-layer="link-labels"]')
       .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
@@ -187,25 +195,36 @@ function updateHitAreaDimensions(
           const labelHeight = bbox.height + (item.style.label.paddingY * 2);
 
           // Use label dimensions plus some padding
-          width = Math.max(width, labelWidth + 10);
-          height = Math.max(height, labelHeight + 10);
+          width = Math.max(width, labelHeight + 10);
+          length = Math.max(length, labelWidth + 20);
         }
       } catch {
         // Fallback to estimated label size
         const text = item.link.label ?? '';
         const fontSize = item.style.label.fontSize;
-        const estimatedWidth = text.length * fontSize * 0.6 + (item.style.label.paddingX * 2) + 10;
+        const estimatedWidth = text.length * fontSize * 0.6 + (item.style.label.paddingX * 2) + 20;
         const estimatedHeight = fontSize + (item.style.label.paddingY * 2) + 10;
 
-        width = Math.max(width, estimatedWidth);
-        height = Math.max(height, estimatedHeight);
+        width = Math.max(width, estimatedHeight);
+        length = Math.max(length, estimatedWidth);
       }
     }
   }
 
-  // Set rectangle dimensions and position (centered at link midpoint)
-  rectElement.setAttribute('x', String(midX - width / 2));
-  rectElement.setAttribute('y', String(midY - height / 2));
-  rectElement.setAttribute('width', String(width));
-  rectElement.setAttribute('height', String(height));
+  // Create a rotated rectangle that covers the entire link including arrowhead
+  // First, position rectangle at midpoint
+  const rectX = midX - length / 2;
+  const rectY = midY - width / 2;
+
+  // Set dimensions
+  rectElement.setAttribute('width', String(length));
+  rectElement.setAttribute('height', String(width));
+
+  // Set position
+  rectElement.setAttribute('x', String(rectX));
+  rectElement.setAttribute('y', String(rectY));
+
+  // Apply rotation to align with link direction
+  const degrees = (angle * 180) / Math.PI;
+  rectElement.setAttribute('transform', `rotate(${degrees}, ${midX}, ${midY})`);
 }

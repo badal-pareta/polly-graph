@@ -172,6 +172,15 @@ export class InteractionManager {
       this.manager.selectionManager?.selectNode(nodeElement, node);
     });
 
+    // Direct link selection
+    selections.linkSelection.on('click.select', (event: MouseEvent, renderableLinkData: RenderableGraphLink) => {
+      event.stopPropagation();
+      const linkElement = event.currentTarget as SVGLineElement;
+      if (this.manager.selectionManager) {
+        this.manager.selectionManager.selectLink(linkElement, renderableLinkData, event);
+      }
+    });
+
     // Link label selection - both text and background should be clickable
     selections.linkLabelSelection.on('click.select', (event: MouseEvent, renderableLinkLabel: RenderableLinkLabel) => {
       event.stopPropagation();
@@ -184,7 +193,7 @@ export class InteractionManager {
       }
     });
 
-    // Link selection will also be handled by hit areas for broader click area
+    // Link hit areas also provide selection for broader click area
   }
 
   /**
@@ -224,7 +233,7 @@ export class InteractionManager {
         createLinkHover(linkHitAreaSelection, this.manager.config.interaction.hover.linkStyle);
       }
 
-      // Setup tick handler for hit areas (now rectangles)
+      // Setup tick handler for hit areas (now rotated rectangles)
       if (this.manager.simulation) {
         this.manager.simulation.on('tick.hitarea', (): void => {
           linkHitAreaSelection
@@ -235,16 +244,25 @@ export class InteractionManager {
               if (!source.x || !source.y || !target.x || !target.y) return;
 
               const rectElement = this as SVGRectElement;
+
+              // Calculate link vector and angle
+              const dx = target.x - source.x;
+              const dy = target.y - source.y;
+              const angle = Math.atan2(dy, dx);
               const midX = (source.x + target.x) / 2;
               const midY = (source.y + target.y) / 2;
 
-              // Get current width/height to maintain them
+              // Get current dimensions
               const width = parseFloat(rectElement.getAttribute('width') || '20');
               const height = parseFloat(rectElement.getAttribute('height') || '20');
 
-              // Update position while maintaining dimensions
+              // Update position and rotation
               rectElement.setAttribute('x', String(midX - width / 2));
               rectElement.setAttribute('y', String(midY - height / 2));
+
+              // Update rotation to align with link direction
+              const degrees = (angle * 180) / Math.PI;
+              rectElement.setAttribute('transform', `rotate(${degrees}, ${midX}, ${midY})`);
             });
         });
       }
