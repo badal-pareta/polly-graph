@@ -27,15 +27,26 @@ export function getShortenedSourcePoint(link: GraphLink, style: ResolvedLinkStyl
   // Get current radius from DOM if available (accounts for selection changes)
   let sourceRadius: number = source.style?.radius ?? 12;
   if (typeof document !== 'undefined') {
-    // Find the circle element by iterating through D3-bound elements
-    const circles = Array.from(document.querySelectorAll('circle'));
-    for (const circle of circles) {
-      const boundData = (circle as SVGCircleElement & { __data__: GraphNode }).__data__;
-      if (boundData && boundData.id === source.id) {
-        const currentRadius = parseFloat(circle.getAttribute('r') || '12');
-        sourceRadius = currentRadius;
-        break;
+    // Find the circle element - prefer selection layer, then regular layer
+    // First try selection layer
+    let circle = document.querySelector(`[data-layer="selection-nodes"] circle[data-node-id="${source.id}"]`) as SVGCircleElement | null;
+
+    // If not in selection layer, try regular nodes layer
+    if (!circle) {
+      // Find by iterating through circles with D3 data binding
+      const circles = Array.from(document.querySelectorAll('circle'));
+      for (const c of circles) {
+        const boundData = (c as SVGCircleElement & { __data__: GraphNode }).__data__;
+        if (boundData && boundData.id === source.id) {
+          circle = c;
+          break;
+        }
       }
+    }
+
+    if (circle) {
+      const currentRadius = parseFloat(circle.getAttribute('r') || '12');
+      sourceRadius = currentRadius;
     }
   }
 
@@ -70,15 +81,26 @@ export function getShortenedTargetPoint(link: GraphLink, style: ResolvedLinkStyl
   // Get current radius from DOM if available (accounts for selection changes)
   let targetRadius: number = target.style?.radius ?? 12;
   if (typeof document !== 'undefined') {
-    // Find the circle element by iterating through D3-bound elements
-    const circles = Array.from(document.querySelectorAll('circle'));
-    for (const circle of circles) {
-      const boundData = (circle as SVGCircleElement & { __data__: GraphNode }).__data__;
-      if (boundData && boundData.id === target.id) {
-        const currentRadius = parseFloat(circle.getAttribute('r') || '12');
-        targetRadius = currentRadius;
-        break;
+    // Find the circle element - prefer selection layer, then regular layer
+    // First try selection layer
+    let circle = document.querySelector(`[data-layer="selection-nodes"] circle[data-node-id="${target.id}"]`) as SVGCircleElement | null;
+
+    // If not in selection layer, try regular nodes layer
+    if (!circle) {
+      // Find by iterating through circles with D3 data binding
+      const circles = Array.from(document.querySelectorAll('circle'));
+      for (const c of circles) {
+        const boundData = (c as SVGCircleElement & { __data__: GraphNode }).__data__;
+        if (boundData && boundData.id === target.id) {
+          circle = c;
+          break;
+        }
       }
+    }
+
+    if (circle) {
+      const currentRadius = parseFloat(circle.getAttribute('r') || '12');
+      targetRadius = currentRadius;
     }
   }
 

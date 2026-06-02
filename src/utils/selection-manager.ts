@@ -17,6 +17,7 @@ export interface SelectionState {
   selectedNode: {
     element: SVGCircleElement;
     data: GraphNode;
+    originalRadius: number;
   } | null;
   selectedLink: {
     element: SVGLineElement;
@@ -69,6 +70,9 @@ export class SelectionManager {
     // Clear any existing selections
     this.clearSelection();
 
+    // Store original radius before modification
+    const originalRadius = nodeData.style?.radius ?? 8;
+
     // Bring node and related elements to front
     this.bringNodeToFront(nodeElement, nodeData);
 
@@ -103,7 +107,7 @@ export class SelectionManager {
       .style('pointer-events', 'auto');
 
     // Update state
-    this.state.selectedNode = { element: nodeElement, data: nodeData };
+    this.state.selectedNode = { element: nodeElement, data: nodeData, originalRadius };
 
     // Emit event
     this.eventEmitter.emit('nodeSelect', { node: nodeData, element: nodeElement });
@@ -179,7 +183,7 @@ export class SelectionManager {
   private deselectNode(): void {
     if (!this.state.selectedNode) return;
 
-    const { element, data } = this.state.selectedNode;
+    const { element, data, originalRadius } = this.state.selectedNode;
 
     // Restore elements to their original layers
     this.restoreSelectedElements(data);
@@ -190,8 +194,7 @@ export class SelectionManager {
     element.style.strokeWidth = '';
     element.style.opacity = '';
 
-    // Reset radius to node's original radius or default
-    const originalRadius = data.style?.radius ?? 8;
+    // Reset radius to the stored original radius
     element.setAttribute('r', String(originalRadius));
     // Immediately update link positions to account for the reset radius
     this.updateConnectedLinkPositions(data);
@@ -327,6 +330,8 @@ export class SelectionManager {
 
     // Mark node as selected to prevent hover interference
     nodeElement.dataset.selected = 'true';
+    // Add node ID for easier lookup
+    nodeElement.setAttribute('data-node-id', nodeData.id);
 
     // Move related links to selection links sub-layer (using same selector as hover)
     const connectedLinks = this.root
@@ -513,25 +518,28 @@ export class SelectionManager {
    * This ensures arrowheads reposition correctly when node radius changes
    */
   private updateConnectedLinkPositions(nodeData: GraphNode): void {
-    // Find and update all links connected to this node
-    this.root.selectAll<SVGLineElement, RenderableGraphLink>('line:not(.link-hit-area)')
-      .filter((renderableLink: RenderableGraphLink): boolean => {
-        const source = renderableLink.link.source as GraphNode;
-        const target = renderableLink.link.target as GraphNode;
-        return source.id === nodeData.id || target.id === nodeData.id;
-      })
-      .each(function(item: RenderableGraphLink) {
-        const linkElement = this as SVGLineElement;
+    // Use requestAnimationFrame to ensure DOM updates have been processed
+    requestAnimationFrame(() => {
+      // Find and update all links connected to this node
+      this.root.selectAll<SVGLineElement, RenderableGraphLink>('line:not(.link-hit-area)')
+        .filter((renderableLink: RenderableGraphLink): boolean => {
+          const source = renderableLink.link.source as GraphNode;
+          const target = renderableLink.link.target as GraphNode;
+          return source.id === nodeData.id || target.id === nodeData.id;
+        })
+        .each(function(item: RenderableGraphLink) {
+          const linkElement = this as SVGLineElement;
 
-        // Update link endpoints using the same logic as performance tick manager
-        const sourcePoint = getShortenedSourcePoint(item.link, item.style);
-        const targetPoint = getShortenedTargetPoint(item.link, item.style);
+          // Update link endpoints using the same logic as performance tick manager
+          const sourcePoint = getShortenedSourcePoint(item.link, item.style);
+          const targetPoint = getShortenedTargetPoint(item.link, item.style);
 
-        linkElement.setAttribute('x1', String(sourcePoint.x));
-        linkElement.setAttribute('y1', String(sourcePoint.y));
-        linkElement.setAttribute('x2', String(targetPoint.x));
-        linkElement.setAttribute('y2', String(targetPoint.y));
-      });
+          linkElement.setAttribute('x1', String(sourcePoint.x));
+          linkElement.setAttribute('y1', String(sourcePoint.y));
+          linkElement.setAttribute('x2', String(targetPoint.x));
+          linkElement.setAttribute('y2', String(targetPoint.y));
+        });
+    });
   }
 
   /**
