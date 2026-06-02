@@ -23,7 +23,22 @@ export function getShortenedSourcePoint(link: GraphLink, style: ResolvedLinkStyl
   const dy: number = targetY - sourceY;
 
   const distance: number = Math.sqrt(dx * dx + dy * dy) || 1;
-  const sourceRadius: number = source.style?.radius ?? 12;
+
+  // Get current radius from DOM if available (accounts for selection changes)
+  let sourceRadius: number = source.style?.radius ?? 12;
+  if (typeof document !== 'undefined') {
+    // Find the circle element by iterating through D3-bound elements
+    const circles = Array.from(document.querySelectorAll('circle'));
+    for (const circle of circles) {
+      const boundData = (circle as SVGCircleElement & { __data__: GraphNode }).__data__;
+      if (boundData && boundData.id === source.id) {
+        const currentRadius = parseFloat(circle.getAttribute('r') || '12');
+        sourceRadius = currentRadius;
+        break;
+      }
+    }
+  }
+
   const sourceStrokeWidth: number = source.style?.strokeWidth ?? 1.5;
 
   // Calculate offset from source node edge including ring/stroke
@@ -51,7 +66,22 @@ export function getShortenedTargetPoint(link: GraphLink, style: ResolvedLinkStyl
   const dy: number = targetY - sourceY;
 
   const distance: number = Math.sqrt(dx * dx + dy * dy) || 1;
-  const targetRadius: number = target.style?.radius ?? 12;
+
+  // Get current radius from DOM if available (accounts for selection changes)
+  let targetRadius: number = target.style?.radius ?? 12;
+  if (typeof document !== 'undefined') {
+    // Find the circle element by iterating through D3-bound elements
+    const circles = Array.from(document.querySelectorAll('circle'));
+    for (const circle of circles) {
+      const boundData = (circle as SVGCircleElement & { __data__: GraphNode }).__data__;
+      if (boundData && boundData.id === target.id) {
+        const currentRadius = parseFloat(circle.getAttribute('r') || '12');
+        targetRadius = currentRadius;
+        break;
+      }
+    }
+  }
+
   const targetStrokeWidth: number = target.style?.strokeWidth ?? 1.5;
 
   const arrowLength: number = style.arrow.enabled ? style.arrow.size * 2 : 0;

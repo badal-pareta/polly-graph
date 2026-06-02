@@ -106,33 +106,39 @@ export function createNodeHover(
 
   // Simple hover/restore using dedicated layers - no need to track positions
 
-  // Helper function to clear all hover layers
+  // Track elevated elements for cleanup
+  const elevatedElements = new Set<SVGElement>();
+
+  // Helper function to clear all visual elevation (no DOM manipulation)
   function clearAllHoverLayers(): void {
-    // Move all nodes back to base nodes layer
-    const hoverNodesLayer = root.select('[data-layer="hover-nodes"]').node() as SVGGElement;
-    const nodesLayer = root.select('[data-layer="nodes"]').node() as SVGGElement;
-    if (hoverNodesLayer && nodesLayer) {
-      while (hoverNodesLayer.firstChild) {
-        nodesLayer.appendChild(hoverNodesLayer.firstChild);
-      }
-    }
+    elevatedElements.forEach(element => {
+      // Remove elevation class and styles
+      element.classList.remove('pg-hover-elevated');
+      element.style.removeProperty('filter');
 
-    // Move all node labels back to base node labels layer
-    const hoverNodeLabelsLayer = root.select('[data-layer="hover-node-labels"]').node() as SVGGElement;
-    const nodeLabelsLayer = root.select('[data-layer="node-labels"]').node() as SVGGElement;
-    if (hoverNodeLabelsLayer && nodeLabelsLayer) {
-      while (hoverNodeLabelsLayer.firstChild) {
-        nodeLabelsLayer.appendChild(hoverNodeLabelsLayer.firstChild);
+      // Reset any modified attributes
+      if (element.tagName === 'circle') {
+        element.removeAttribute('data-hover-elevated');
       }
-    }
 
-    // Move all links back to base links layer and trigger unhover
-    const hoverLinksLayer = root.select('[data-layer="hover-links"]').node() as SVGGElement;
-    const linksLayer = root.select('[data-layer="links"]').node() as SVGGElement;
-    if (hoverLinksLayer && linksLayer) {
-      while (hoverLinksLayer.firstChild) {
-        const linkElement = hoverLinksLayer.firstChild as SVGLineElement;
-        linksLayer.appendChild(linkElement);
+      // Reset hover-only label opacity
+      if (element.classList.contains('link-label')) {
+        const labelData = (element as unknown as { __data__: RenderableLinkLabel }).__data__;
+        if (labelData && labelData.style.label.visibility === 'hover' &&
+            !element.classList.contains('label-selection-pinned')) {
+          element.style.opacity = '0';
+          element.style.pointerEvents = 'none';
+        }
+      }
+    });
+
+    elevatedElements.clear();
+
+    // Trigger unhover events for links that were elevated
+    root.selectAll<SVGLineElement, RenderableGraphLink>('line[data-hover-elevated]')
+      .each(function() {
+        const linkElement = this as SVGLineElement;
+        linkElement.removeAttribute('data-hover-elevated');
 
         // Trigger unhover event
         const event = new MouseEvent('mouseleave', {
@@ -141,27 +147,14 @@ export function createNodeHover(
           view: window
         });
         linkElement.dispatchEvent(event);
-      }
-    }
+      });
+  }
 
-    // Move all link labels back to base link labels layer and reset opacity
-    const hoverLinkLabelsLayer = root.select('[data-layer="hover-link-labels"]').node() as SVGGElement;
-    const linkLabelsLayer = root.select('[data-layer="link-labels"]').node() as SVGGElement;
-    if (hoverLinkLabelsLayer && linkLabelsLayer) {
-      while (hoverLinkLabelsLayer.firstChild) {
-        const labelElement = hoverLinkLabelsLayer.firstChild as SVGGElement;
-
-        // Reset opacity for hover-only labels before moving
-        const labelData = (labelElement as unknown as { __data__: RenderableLinkLabel }).__data__;
-        if (labelData && labelData.style.label.visibility === 'hover' &&
-            !labelElement.classList.contains('label-selection-pinned')) {
-          labelElement.style.opacity = '0';
-          labelElement.style.pointerEvents = 'none';
-        }
-
-        linkLabelsLayer.appendChild(labelElement);
-      }
-    }
+  // Helper function to elevate element visually without DOM manipulation
+  function elevateElement(element: SVGElement): void {
+    element.classList.add('pg-hover-elevated');
+    element.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))';
+    elevatedElements.add(element);
   }
 
   nodeSelection
@@ -181,21 +174,16 @@ export function createNodeHover(
       // Clear any previous hover state before applying new one
       clearAllHoverLayers();
 
-      // Move the hovered node itself to hover nodes layer
-      const hoverNodesLayer = root.select('[data-layer="hover-nodes"]').node() as SVGGElement;
-      if (hoverNodesLayer) {
-        hoverNodesLayer.appendChild(hoveredNodeElement);
-      }
+      // Elevate the hovered node visually (no DOM manipulation)
+      elevateElement(hoveredNodeElement);
+      hoveredNodeElement.setAttribute('data-hover-elevated', 'true');
 
-      // Move the hovered node's label to hover node labels layer
+      // Elevate the hovered node's label
       root.selectAll<SVGTextElement, GraphNode>('text')
         .filter((d: GraphNode): boolean => d.id === hoveredNode.id)
         .each(function() {
           const labelElement = this as SVGTextElement;
-          const hoverNodeLabelsLayer = root.select('[data-layer="hover-node-labels"]').node() as SVGGElement;
-          if (hoverNodeLabelsLayer) {
-            hoverNodeLabelsLayer.appendChild(labelElement);
-          }
+          elevateElement(labelElement);
         });
 
       // Find all links connected to this node
@@ -209,11 +197,9 @@ export function createNodeHover(
       connectedLinks.each(function(_renderableLink: RenderableGraphLink) {
         const linkElement = this as SVGLineElement;
 
-        // Move link to hover links sub-layer for proper visual hierarchy
-        const hoverLinksLayer = root.select('[data-layer="hover-links"]').node() as SVGGElement;
-        if (hoverLinksLayer) {
-          hoverLinksLayer.appendChild(linkElement);
-        }
+        // Elevate link visually (no DOM manipulation)
+        elevateElement(linkElement);
+        linkElement.setAttribute('data-hover-elevated', 'true');
 
         // Trigger hover state
         const event = new MouseEvent('mouseenter', {
@@ -224,7 +210,7 @@ export function createNodeHover(
         linkElement.dispatchEvent(event);
       });
 
-      // Also move connected link labels to hover link labels layer and make them visible
+      // Elevate connected link labels and make them visible
       root.selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
         .filter((item: RenderableLinkLabel): boolean => {
           const source = item.link.source as GraphNode;
@@ -233,15 +219,12 @@ export function createNodeHover(
         })
         .each(function(item: RenderableLinkLabel) {
           const labelElement = this as SVGGElement;
-          const hoverLinkLabelsLayer = root.select('[data-layer="hover-link-labels"]').node() as SVGGElement;
-          if (hoverLinkLabelsLayer) {
-            hoverLinkLabelsLayer.appendChild(labelElement);
+          elevateElement(labelElement);
 
-            // Make hover-only labels visible when connected to hovered node
-            if (item.style.label.visibility === 'hover') {
-              labelElement.style.opacity = '1';
-              labelElement.style.pointerEvents = 'auto';
-            }
+          // Make hover-only labels visible when connected to hovered node
+          if (item.style.label.visibility === 'hover') {
+            labelElement.style.opacity = '1';
+            labelElement.style.pointerEvents = 'auto';
           }
         });
     })

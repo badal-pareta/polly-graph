@@ -10,7 +10,7 @@ import { TypedGraphEventEmitter } from './event-emitter';
 import { SelectionInteractionConfig } from '../contracts/graph-config.interface';
 import { GraphLayers } from '../contracts/graph-layers.interface';
 import { createArrowMarker } from '../core/create-arrow-marker';
-import { RenderableGraphLink } from '../renderer/links';
+import { RenderableGraphLink, getShortenedSourcePoint, getShortenedTargetPoint } from '../renderer/links';
 import { NodeTooltipBinding } from '../interactions/bind-node-tooltip';
 
 export interface SelectionState {
@@ -79,7 +79,11 @@ export class SelectionManager {
       if (style.stroke !== undefined) nodeElement.style.stroke = style.stroke;
       if (style.strokeWidth !== undefined) nodeElement.style.strokeWidth = String(style.strokeWidth);
       if (style.opacity !== undefined) nodeElement.style.opacity = String(style.opacity);
-      if (style.radius !== undefined) nodeElement.setAttribute('r', String(style.radius));
+      if (style.radius !== undefined) {
+        nodeElement.setAttribute('r', String(style.radius));
+        // Immediately update link positions to account for the new radius
+        this.updateConnectedLinkPositions(nodeData);
+      }
     }
 
     // Show related link labels on hover visibility
@@ -189,6 +193,8 @@ export class SelectionManager {
     // Reset radius to node's original radius or default
     const originalRadius = data.style?.radius ?? 8;
     element.setAttribute('r', String(originalRadius));
+    // Immediately update link positions to account for the reset radius
+    this.updateConnectedLinkPositions(data);
 
     // Clear selected marker
     delete element.dataset.selected;
@@ -225,7 +231,7 @@ export class SelectionManager {
     this.root
       .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
       .filter((item: RenderableLinkLabel): boolean => item.link === data)
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.linkLabels.appendChild(element);
@@ -331,7 +337,7 @@ export class SelectionManager {
         return source.id === nodeData.id || target.id === nodeData.id;
       });
 
-    connectedLinks.each((d, i, nodes) => {
+    connectedLinks.each((_, i, nodes) => {
       const element = nodes[i];
       if (element) {
         this.layers.selectionLayer.links.appendChild(element);
@@ -342,7 +348,7 @@ export class SelectionManager {
     this.root
       .selectAll<SVGTextElement, GraphNode>('text')
       .filter((d: GraphNode): boolean => d.id === nodeData.id)
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.selectionLayer.nodeLabels.appendChild(element);
@@ -357,7 +363,7 @@ export class SelectionManager {
         const target = item.link.target as GraphNode;
         return source.id === nodeData.id || target.id === nodeData.id;
       })
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.selectionLayer.linkLabels.appendChild(element);
@@ -376,7 +382,7 @@ export class SelectionManager {
     this.root
       .selectAll<SVGGElement, RenderableLinkLabel>('.link-label')
       .filter((item: RenderableLinkLabel): boolean => item.link === renderableLink.link)
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.selectionLayer.linkLabels.appendChild(element);
@@ -391,7 +397,7 @@ export class SelectionManager {
     // Move node back to nodes layer
     this.root.selectAll<SVGCircleElement, GraphNode>('circle')
       .filter((d: GraphNode) => d.id === nodeData.id)
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.nodes.appendChild(element);
@@ -405,7 +411,7 @@ export class SelectionManager {
         const target = d.link.target as GraphNode;
         return source.id === nodeData.id || target.id === nodeData.id;
       })
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.links.appendChild(element);
@@ -415,7 +421,7 @@ export class SelectionManager {
     // Move node labels back to nodeLabels layer
     this.root.selectAll<SVGTextElement, GraphNode>('text')
       .filter((d: GraphNode): boolean => d.id === nodeData.id)
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.nodeLabels.appendChild(element);
@@ -429,7 +435,7 @@ export class SelectionManager {
         const target = item.link.target as GraphNode;
         return source.id === nodeData.id || target.id === nodeData.id;
       })
-      .each((d, i, nodes) => {
+      .each((_, i, nodes) => {
         const element = nodes[i];
         if (element) {
           this.layers.linkLabels.appendChild(element);
@@ -438,15 +444,6 @@ export class SelectionManager {
   }
 
 
-  /**
-   * Utility method to bring any SVG element to front using appendChild
-   * Based on the reference implementation pattern
-   */
-  private bringElementToFront(element: Element): void {
-    if (element.parentNode) {
-      element.parentNode.appendChild(element);
-    }
-  }
 
   /**
    * Clear hover state to prevent conflicts with selection
@@ -509,6 +506,32 @@ export class SelectionManager {
       }
     }
 
+  }
+
+  /**
+   * Immediately update positions of links connected to the specified node
+   * This ensures arrowheads reposition correctly when node radius changes
+   */
+  private updateConnectedLinkPositions(nodeData: GraphNode): void {
+    // Find and update all links connected to this node
+    this.root.selectAll<SVGLineElement, RenderableGraphLink>('line:not(.link-hit-area)')
+      .filter((renderableLink: RenderableGraphLink): boolean => {
+        const source = renderableLink.link.source as GraphNode;
+        const target = renderableLink.link.target as GraphNode;
+        return source.id === nodeData.id || target.id === nodeData.id;
+      })
+      .each(function(item: RenderableGraphLink) {
+        const linkElement = this as SVGLineElement;
+
+        // Update link endpoints using the same logic as performance tick manager
+        const sourcePoint = getShortenedSourcePoint(item.link, item.style);
+        const targetPoint = getShortenedTargetPoint(item.link, item.style);
+
+        linkElement.setAttribute('x1', String(sourcePoint.x));
+        linkElement.setAttribute('y1', String(sourcePoint.y));
+        linkElement.setAttribute('x2', String(targetPoint.x));
+        linkElement.setAttribute('y2', String(targetPoint.y));
+      });
   }
 
   /**

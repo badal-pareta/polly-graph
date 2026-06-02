@@ -34,3 +34,28 @@
   cursor: pointer;
   transition: stroke-opacity 0.2s ease;
 }
+
+/* Hover Elevation Effects */
+.pg-hover-elevated {
+  /* Create visual elevation effect using paint-order to bring elements forward */
+  paint-order: fill stroke markers;
+  /* Add subtle visual enhancement */
+  transition: filter 0.15s ease-in-out;
+}
+
+.pg-hover-elevated.pg-layer-nodes circle,
+.pg-hover-elevated[data-hover-elevated] {
+  /* Enhanced visual prominence for hovered elements */
+  paint-order: stroke fill markers;
+}
+
+/* Ensure elevated elements appear above others in SVG context */
+svg .pg-hover-elevated {
+  /* SVG doesn't support z-index, but we can use filter effects */
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+}
+
+/* Additional elevation for connected elements during hover */
+[data-hover-elevated="true"] {
+  opacity: 1 !important; /* Ensure visibility */
+}
