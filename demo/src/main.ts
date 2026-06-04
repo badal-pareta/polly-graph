@@ -1,357 +1,296 @@
-import './styles.css';
-import { createGraph, GraphInstance, GraphNode, GraphLink } from '../../src';
-import { GraphTestData, generateSmallGraph, generateMediumGraph, generateLargeGraph, generateExtraLargeGraph } from './test-data-generator';
-import { demoNodes, demoLinks, demoInteractionConfig } from './demo-data';
-import { EnhancedSimulationConfig } from '../../src/contracts/simulation.interface';
+/**
+ * Polly Graph Demo - V1 vs V2 Performance Comparison
+ * Main application entry point
+ */
 
-type GraphSize = 'knowledge-graph' | 'small' | 'medium' | 'large' | 'extra-large';
+// Import V1 implementation
+import { createGraph } from '../../src/v1';
+import type { GraphInstance } from '../../src/v1/contracts/graph-instance.interface';
 
+// Import data generator with V1 types
+import { generateGraphData, GENERATED_DATASETS, type DatasetName, type TestGraphData } from './data/generate-data';
+
+// Import demo configuration
+import { INTERACTION_CONFIG, CONTROLS_CONFIG, LEGEND_CONFIG } from './config/graph-config';
+
+// Performance tracking
 interface PerformanceMetrics {
-  loadTime: number;
   renderTime: number;
-  nodeCount: number;
-  linkCount: number;
-  density: number;
+  initTime: number;
+  dataLoadTime: number;
+  lastUpdate: number;
 }
 
-let currentGraph: GraphInstance | null = null;
-let currentData: GraphTestData | null = null;
-let performanceMetrics: PerformanceMetrics | null = null;
+class PollyGraphDemo {
+  private v1Graph: GraphInstance | null = null;
+  // private v2Graph: any | null = null; // Placeholder for V2
+  private currentData: TestGraphData | null = null;
+  private v1Metrics: PerformanceMetrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
+  // private v2Metrics: PerformanceMetrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
 
-const hostContainer = document.getElementById('graph-viewport') as HTMLElement;
-const graphSizeSelect = document.getElementById('graph-size') as HTMLSelectElement;
-const loadGraphBtn = document.getElementById('load-graph') as HTMLButtonElement;
-const captureBtn = document.getElementById('capture-btn') as HTMLButtonElement;
-const resetViewBtn = document.getElementById('reset-view') as HTMLButtonElement;
-const clearSelectionBtn = document.getElementById('clear-selection') as HTMLButtonElement;
-const loadingIndicator = document.getElementById('loading') as HTMLElement;
-
-if (!hostContainer) {
-  throw new Error('Graph viewport container not found');
-}
-
-// Knowledge Graph realistic data
-function generateKnowledgeGraph(): GraphTestData {
-  return {
-    nodes: demoNodes,
-    links: demoLinks,
-    name: 'Knowledge Graph',
-    description: 'COVID-19 biomedical research knowledge graph with hub-spoke pattern'
+  private elements = {
+    datasetSelect: document.getElementById('dataset-select') as HTMLSelectElement,
+    topologySelect: document.getElementById('topology-select') as HTMLSelectElement,
+    generateBtn: document.getElementById('generate-btn') as HTMLButtonElement,
+    resetViewBtn: document.getElementById('reset-view-btn') as HTMLButtonElement,
+    stats: document.getElementById('stats') as HTMLDivElement,
+    v1Container: document.getElementById('v1-container') as HTMLDivElement,
+    v2Container: document.getElementById('v2-container') as HTMLDivElement,
+    v1Perf: document.getElementById('v1-perf') as HTMLSpanElement,
+    v2Perf: document.getElementById('v2-perf') as HTMLSpanElement
   };
-}
 
-// Test data generators
-const dataGenerators = {
-  'knowledge-graph': generateKnowledgeGraph,
-  small: generateSmallGraph,
-  medium: generateMediumGraph,
-  large: generateLargeGraph,
-  'extra-large': generateExtraLargeGraph
-};
-
-// Simulation configurations for each graph size
-const simulationConfigs: Record<GraphSize, EnhancedSimulationConfig> = {
-  'knowledge-graph': {
-    adaptive: { enabled: true },
-    forces: {
-      link: { strength: 0.9, distance: 160 }, // Optimized for label space and hub-spoke clarity
-      charge: { strength: -280 }, // Strong repulsion to prevent label overlap
-      center: { strength: 0.015 }, // Gentle centering to allow natural clustering
-      collide: { strength: 0.8 } // Prevent node overlap
-    }
-  },
-  small: {
-    adaptive: { enabled: true }
-  },
-  medium: {
-    adaptive: { enabled: true }
-  },
-  large: {
-    adaptive: { enabled: true },
-    warmup: { enabled: true, ticks: 150 }
-  },
-  'extra-large': {
-    adaptive: { enabled: true },
-    warmup: { enabled: true, ticks: 100 },
-    forces: {
-      charge: { strength: -30 },
-      collide: { strength: 0.5 },
-      center: { strength: 0.01 }
-    }
-  }
-};
-
-async function loadGraph(graphSize: GraphSize): Promise<void> {
-  showLoading(true);
-
-  // SIMULATE REAL-WORLD SCENARIO: Container starts with no dimensions
-
-  // Step 1: Collapse container to zero size (simulating modal/tab before shown)
-  hostContainer.style.width = '0px';
-  hostContainer.style.height = '0px';
-  hostContainer.style.overflow = 'hidden';
-
-  const startTime = performance.now();
-
-  // Generate test data
-  const generator = dataGenerators[graphSize];
-  currentData = generator();
-
-  const dataGenTime = performance.now();
-
-  // Destroy existing graph
-  if (currentGraph) {
-    currentGraph.destroy();
-    currentGraph = null;
+  constructor() {
+    this.setupEventListeners();
+    this.generateInitialData();
   }
 
-  // Step 2: Create graph with zero-sized container (this should not cause positioning issues)
+  private setupEventListeners() {
+    this.elements.generateBtn.addEventListener('click', () => {
+      this.generateNewData();
+    });
 
-  // Create new graph with adaptive simulation
-  const renderStartTime = performance.now();
+    this.elements.resetViewBtn.addEventListener('click', () => {
+      this.resetViews();
+    });
 
-  currentGraph = createGraph({
-    container: hostContainer,
-    nodes: currentData.nodes,
-    links: currentData.links,
-    simulation: simulationConfigs[graphSize],
-    interaction: {
-      drag: { enabled: true },
-      hover: {
-        enabled: true,
-        tooltip: {
-          enabled: true,
-          theme: 'dark',
-          renderContent: (node: GraphNode) => `
-            <div style="padding: 8px;">
-              <strong>${node.type}:</strong> ${node.label}
-            </div>
-          `
-        },
-        nodeStyle: {
-          strokeWidth: 3,
-          // Should get purple stroke from smart merge
-        },
-        linkStyle: {
-          stroke: '#f59e0b',
-          strokeWidth: 3,
-          opacity: 1
-        }
-      },
-      selection: {
-        enabled: true,
-        nodeStyle: {
-          radius: 25,  // Test radius expansion
-          stroke: '#f59e0b',
-          strokeWidth: 4
-        },
-        linkStyle: {
-          stroke: '#f59e0b',
-          strokeWidth: 3
-        }
+    this.elements.datasetSelect.addEventListener('change', () => {
+      this.loadPresetData();
+    });
+
+    this.elements.topologySelect.addEventListener('change', () => {
+      this.generateNewData();
+    });
+  }
+
+  private generateInitialData() {
+    this.loadPresetData();
+  }
+
+  private loadPresetData() {
+    const selectedDataset = this.elements.datasetSelect.value as DatasetName;
+    this.showLoading('Loading preset dataset...');
+
+    try {
+      const startTime = performance.now();
+      this.currentData = GENERATED_DATASETS[selectedDataset]();
+      const loadTime = performance.now() - startTime;
+
+      this.updateStats(`Loaded ${selectedDataset} dataset`, loadTime);
+      this.renderGraphs();
+    } catch (error) {
+      this.showError(`Failed to load preset data: ${error}`);
+    }
+  }
+
+  private generateNewData() {
+    const selectedDataset = this.elements.datasetSelect.value as DatasetName;
+    const topology = this.elements.topologySelect.value;
+    const isClustered = topology === 'clustered';
+
+    this.showLoading('Generating new graph data...');
+    this.elements.generateBtn.disabled = true;
+
+    // Use setTimeout to allow UI to update before heavy computation
+    setTimeout(() => {
+      try {
+        const startTime = performance.now();
+
+        // Get node count from dataset selection
+        const nodeCount = this.getNodeCountForDataset(selectedDataset);
+        const avgConnections = this.getAvgConnectionsForDataset(selectedDataset);
+
+        this.currentData = generateGraphData(nodeCount, avgConnections, isClustered);
+        const loadTime = performance.now() - startTime;
+
+        this.updateStats(`Generated ${selectedDataset} dataset (${topology})`, loadTime);
+        this.renderGraphs();
+      } catch (error) {
+        this.showError(`Failed to generate data: ${error}`);
+      } finally {
+        this.elements.generateBtn.disabled = false;
       }
-    },
-    controls: {
-      enabled: true,
-      position: 'bottom-left'
-    },
-    legend: {
-      enabled: true,
-      collapsible: true,
-      position: 'top-right'
+    }, 100);
+  }
+
+  private getNodeCountForDataset(dataset: DatasetName): number {
+    const counts = {
+      tiny: 10,
+      small: 50,
+      medium: 100,
+      large: 500,
+      xl: 1000,
+      xxl: 5000,
+      huge: 25000,
+      massive: 50000
+    };
+    return counts[dataset];
+  }
+
+  private getAvgConnectionsForDataset(dataset: DatasetName): number {
+    const connections = {
+      tiny: 2,
+      small: 2.5,
+      medium: 3,
+      large: 3.5,
+      xl: 4,
+      xxl: 3,
+      huge: 2.5,
+      massive: 2
+    };
+    return connections[dataset];
+  }
+
+  private async renderGraphs() {
+    if (!this.currentData) {
+      this.showError('No data available to render');
+      return;
     }
-  });
 
-  // Step 3: Render the graph first (with zero-sized container)
-  currentGraph.render();
+    // Render V1 graph
+    await this.renderV1Graph();
 
-  // Set up selection event handlers after render (when event emitter is initialized)
-  setupEventListeners();
+    // V2 would be rendered here when implemented
+    this.showV2Placeholder();
+  }
 
-  // Step 4: Simulate async data loading delay (like API call)
-  await new Promise(resolve => setTimeout(resolve, 500));
+  private async renderV1Graph(): Promise<void> {
+    if (!this.currentData) return;
 
-  // Step 5: Dynamically restore container size (simulating modal shown/tab activated)
-  hostContainer.style.width = '';
-  hostContainer.style.height = '';
-  hostContainer.style.overflow = '';
+    try {
+      this.elements.v1Perf.textContent = 'Rendering...';
+      this.elements.v1Perf.className = 'performance-indicator';
 
-  // Step 6: Auto-fit view after container resize
-  setTimeout(() => {
-    if (currentGraph) {
-      currentGraph.fitView();
+      const startTime = performance.now();
+
+      // Cleanup existing graph
+      if (this.v1Graph) {
+        this.v1Graph.destroy();
+        this.v1Graph = null;
+      }
+
+      // Clear container
+      this.elements.v1Container.innerHTML = '';
+
+      const initStart = performance.now();
+
+      // Create V1 graph
+      this.v1Graph = createGraph({
+        container: this.elements.v1Container,
+        nodes: this.currentData.nodes,
+        links: this.currentData.links,
+        controls: CONTROLS_CONFIG,
+        legend: LEGEND_CONFIG,
+        interaction: INTERACTION_CONFIG
+      });
+
+      const initTime = performance.now() - initStart;
+
+      // Configure graph styling
+      this.configureV1Graph();
+
+      // Render the graph
+      const renderStart = performance.now();
+      await this.v1Graph.render();
+      const renderTime = performance.now() - renderStart;
+
+      const totalTime = performance.now() - startTime;
+
+      // Update metrics
+      this.v1Metrics = {
+        renderTime,
+        initTime,
+        dataLoadTime: 0, // Already tracked elsewhere
+        lastUpdate: Date.now()
+      };
+
+      // Update performance indicator
+      this.updateV1Performance(totalTime);
+
+    } catch (error) {
+      this.showError(`V1 render failed: ${error}`);
+      this.elements.v1Perf.textContent = 'Error';
+      this.elements.v1Perf.className = 'performance-indicator slow';
     }
-  }, 300); // Give resize observer time to detect changes
-
-  const renderTime = performance.now();
-
-  // Calculate performance metrics
-  performanceMetrics = {
-    loadTime: dataGenTime - startTime,
-    renderTime: renderTime - renderStartTime,
-    nodeCount: currentData.nodes.length,
-    linkCount: currentData.links.length,
-    density: currentData.links.length / Math.max(currentData.nodes.length, 1)
-  };
-
-  // Update UI
-  updateSimulationConfigDisplay(graphSize);
-  updatePerformanceDisplay();
-
-  showLoading(false);
-}
-
-function setupEventListeners(): void {
-  if (!currentGraph) {
-    return;
   }
 
-  // Enhanced event listeners to showcase the new selection system
-  const unsubscribeNode = currentGraph.on('nodeSelect', (node, element) => {
-    updateSelectionStatus(`Node: ${node.label || node.id} (${node.type})`);
-  });
+  private configureV1Graph() {
+    if (!this.v1Graph) return;
 
-  currentGraph.on('linkSelect', (link, element) => {
-    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
-    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    updateSelectionStatus(`Link: ${sourceId} → ${targetId}${link.label ? ` (${link.label})` : ''}`);
-  });
+    // Add event listeners for demonstration
+    this.v1Graph.on('nodeSelect', (node) => {
+      console.log('V1 - Node selected:', node);
+    });
 
-  currentGraph.on('nodeDeselect', (node) => {
-    updateSelectionStatus();
-  });
-
-  currentGraph.on('linkDeselect', (link) => {
-    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
-    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-    updateSelectionStatus();
-  });
-}
-
-function updateSelectionStatus(status?: string): void {
-  const selectionDisplay = document.getElementById('selection-status');
-  if (selectionDisplay) {
-    selectionDisplay.textContent = status || 'None';
-  }
-}
-
-function updateSimulationConfigDisplay(graphSize: GraphSize): void {
-  if (!currentData || !performanceMetrics) return;
-
-  // Update graph info
-  updateElement('node-count', performanceMetrics.nodeCount.toString());
-  updateElement('link-count', performanceMetrics.linkCount.toString());
-  updateElement('graph-density', performanceMetrics.density.toFixed(2));
-
-  // Get adaptive defaults for this graph size
-  const config = simulationConfigs[graphSize];
-  const nodeCount = performanceMetrics.nodeCount;
-
-  // Simulate the adaptive defaults calculation (updated values)
-  let adaptiveDefaults;
-  if (graphSize === 'knowledge-graph') {
-    adaptiveDefaults = {
-      alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 300),
-      velocityDecay: 0.3,
-      chargeStrength: config.forces?.charge?.strength ?? -280,
-      linkStrength: config.forces?.link?.strength ?? 0.9,
-      linkDistance: config.forces?.link?.distance ?? 160,
-      centerStrength: config.forces?.center?.strength ?? 0.015
-    };
-  } else if (nodeCount < 50) {
-    adaptiveDefaults = {
-      alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 300),
-      velocityDecay: 0.3,
-      chargeStrength: -200,
-      linkStrength: 0.8,
-      linkDistance: 140,
-      centerStrength: 0.03
-    };
-  } else if (nodeCount < 200) {
-    adaptiveDefaults = {
-      alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 250),
-      velocityDecay: 0.3,
-      chargeStrength: -180,
-      linkStrength: 0.5,
-      linkDistance: 160,
-      centerStrength: 0.02
-    };
-  } else {
-    adaptiveDefaults = {
-      alpha: 1,
-      alphaDecay: 1 - Math.pow(0.001, 1 / 300),
-      velocityDecay: 0.4,
-      chargeStrength: config.forces?.charge?.strength ?? -120,
-      linkStrength: 0.3,
-      linkDistance: 180,
-      centerStrength: config.forces?.center?.strength ?? 0.01
-    };
+    this.v1Graph.on('linkSelect', (link) => {
+      console.log('V1 - Link selected:', link);
+    });
   }
 
-  // Update simulation parameters
-  updateElement('sim-alpha', adaptiveDefaults.alpha.toString());
-  updateElement('sim-alpha-decay', adaptiveDefaults.alphaDecay.toFixed(6));
-  updateElement('sim-velocity-decay', adaptiveDefaults.velocityDecay.toString());
+  private showV2Placeholder() {
+    // V2 placeholder is already in HTML
+    this.elements.v2Perf.textContent = 'Coming Soon';
+    this.elements.v2Perf.className = 'performance-indicator';
+  }
 
-  // Update force configuration
-  updateElement('force-charge', adaptiveDefaults.chargeStrength.toString());
-  updateElement('force-link-strength', adaptiveDefaults.linkStrength.toString());
-  updateElement('force-link-distance', adaptiveDefaults.linkDistance.toString());
-  updateElement('force-center', adaptiveDefaults.centerStrength.toString());
-}
+  private updateV1Performance(totalTime: number) {
+    const timeText = totalTime < 1000 ?
+      `${Math.round(totalTime)}ms` :
+      `${(totalTime / 1000).toFixed(1)}s`;
 
-function updatePerformanceDisplay(): void {
-  if (!performanceMetrics || !currentData) return;
+    this.elements.v1Perf.textContent = timeText;
+    this.elements.v1Perf.className = totalTime < 500 ?
+      'performance-indicator fast' :
+      totalTime < 2000 ?
+        'performance-indicator' :
+        'performance-indicator slow';
+  }
 
-  updateElement('load-time', `${performanceMetrics.loadTime.toFixed(1)}ms`);
-  updateElement('render-time', `${performanceMetrics.renderTime.toFixed(1)}ms`);
+  private resetViews() {
+    if (this.v1Graph) {
+      this.v1Graph.fitView();
+    }
+    // V2 reset would go here when implemented
+  }
 
-  // Calculate warmup ticks based on graph size
-  const nodeCount = performanceMetrics.nodeCount;
-  const warmupTicks = nodeCount < 50 ? 50 : Math.min(150, nodeCount * 2);
-  updateElement('warmup-ticks', warmupTicks.toString());
-}
+  private updateStats(message: string, loadTime?: number) {
+    if (!this.currentData) return;
 
-function updateElement(id: string, value: string): void {
-  const element = document.getElementById(id);
-  if (element) {
-    element.textContent = value;
+    const { nodes, links, metadata } = this.currentData;
+    const loadTimeText = loadTime ? ` (${Math.round(loadTime)}ms)` : '';
+
+    this.elements.stats.innerHTML = `
+      ${message}${loadTimeText} •
+      <strong>${nodes.length.toLocaleString()}</strong> nodes •
+      <strong>${links.length.toLocaleString()}</strong> links •
+      <strong>${metadata.avgConnections.toFixed(1)}</strong> avg connections
+    `;
+  }
+
+  private showLoading(message: string) {
+    this.elements.stats.innerHTML = `<div class="loading">${message}</div>`;
+  }
+
+  private showError(message: string) {
+    this.elements.stats.innerHTML = `<div class="error">${message}</div>`;
+    console.error(message);
   }
 }
 
-function showLoading(show: boolean): void {
-  loadingIndicator.style.display = show ? 'block' : 'none';
-  loadGraphBtn.disabled = show;
-}
-
-
-// Event listeners
-loadGraphBtn.addEventListener('click', () => {
-  const selectedSize = graphSizeSelect.value as GraphSize;
-  loadGraph(selectedSize);
-});
-
-captureBtn.addEventListener('click', () => {
-  if (currentGraph && currentData) {
-    currentGraph.exportGraph(`polly-graph-${currentData.name.toLowerCase().replace(/\s+/g, '-')}`);
+// Initialize the demo when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    new PollyGraphDemo();
+  } catch (error) {
+    console.error('Failed to initialize Polly Graph Demo:', error);
+    document.getElementById('stats')!.innerHTML =
+      `<div class="error">Failed to initialize demo: ${error}</div>`;
   }
 });
 
-resetViewBtn.addEventListener('click', () => {
-  if (currentGraph) {
-    currentGraph.resetView();
+// Add some global debugging helpers
+(window as any).pollyDemo = {
+  generateCustomData: (nodes: number, connections: number = 3, clustered: boolean = true) => {
+    return generateGraphData(nodes, connections, clustered);
   }
-});
-
-clearSelectionBtn.addEventListener('click', () => {
-  if (currentGraph) {
-    currentGraph.clearSelection();
-    updateSelectionStatus();
-  }
-});
-
-// Load initial graph with realistic knowledge graph
-loadGraph('knowledge-graph');
+};

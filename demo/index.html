@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Polly Graph - Adaptive Simulation Demo</title>
+    <title>Polly Graph Demo - V1 vs V2 Performance</title>
     <style>
       * {
         margin: 0;
@@ -11,28 +12,30 @@
         box-sizing: border-box;
       }
 
+      html, body {
+        height: 100%;
+        overflow: hidden;
+      }
+
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: #f8fafc;
+        background: #f5f5f5;
+        color: #333;
+        display: flex;
+        flex-direction: column;
       }
 
       .header {
         background: white;
         padding: 1rem 2rem;
-        border-bottom: 1px solid #e2e8f0;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid #ddd;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        flex-shrink: 0;
       }
 
       .header h1 {
         font-size: 1.5rem;
-        font-weight: 600;
-        color: #1e293b;
         margin-bottom: 0.5rem;
-      }
-
-      .header p {
-        color: #64748b;
-        font-size: 0.875rem;
       }
 
       .controls {
@@ -40,264 +43,194 @@
         gap: 1rem;
         align-items: center;
         flex-wrap: wrap;
-        margin-top: 1rem;
       }
 
-      .graph-selector {
+      .control-group {
         display: flex;
-        gap: 0.5rem;
         align-items: center;
-      }
-
-      .graph-selector label {
-        font-weight: 500;
-        color: #374151;
-        font-size: 0.875rem;
-      }
-
-      .graph-selector select {
-        padding: 0.5rem 1rem;
-        border: 1px solid #d1d5db;
-        border-radius: 0.375rem;
-        background: white;
-        font-size: 0.875rem;
-        min-width: 200px;
-      }
-
-      .action-buttons {
-        display: flex;
         gap: 0.5rem;
+      }
+
+      .control-group label {
+        font-weight: 500;
+        min-width: 80px;
+      }
+
+      select, button {
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.9rem;
       }
 
       button {
-        padding: 0.5rem 1rem;
-        border: 1px solid #d1d5db;
-        border-radius: 0.375rem;
-        background: white;
-        color: #374151;
-        font-size: 0.875rem;
+        background: #007acc;
+        color: white;
+        border: none;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: background-color 0.2s;
       }
 
       button:hover {
-        background: #f9fafb;
-        border-color: #9ca3af;
+        background: #005a9e;
       }
 
-      button.primary {
-        background: #3b82f6;
-        color: white;
-        border-color: #3b82f6;
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
       }
 
-      button.primary:hover {
-        background: #2563eb;
-        border-color: #2563eb;
+      .stats {
+        background: #e3f2fd;
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+        color: #1565c0;
       }
 
       .main-content {
         display: flex;
-        height: calc(100vh - 120px);
-      }
-
-      .sidebar {
-        width: 300px;
-        background: white;
-        border-right: 1px solid #e2e8f0;
-        padding: 1.5rem;
-        overflow-y: auto;
-      }
-
-      .sidebar h3 {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #1e293b;
-        margin-bottom: 1rem;
-      }
-
-      .config-section {
-        margin-bottom: 2rem;
-      }
-
-      .config-section h4 {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #374151;
-        margin-bottom: 0.5rem;
-      }
-
-      .config-item {
-        display: flex;
-        justify-content: between;
-        padding: 0.25rem 0;
-        font-size: 0.75rem;
-        border-bottom: 1px solid #f1f5f9;
-      }
-
-      .config-item .label {
-        color: #64748b;
-        font-weight: 500;
-        min-width: 120px;
-      }
-
-      .config-item .value {
-        color: #1e293b;
-        font-family: 'SF Mono', Monaco, monospace;
-        margin-left: auto;
-      }
-
-      .performance-stats {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.375rem;
-        padding: 1rem;
-      }
-
-      .performance-stats h4 {
-        margin-bottom: 0.75rem;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
       }
 
       .graph-container {
         flex: 1;
         position: relative;
+        border-right: 1px solid #ddd;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
       }
 
-      #graph-viewport {
-        width: 100%;
+      .graph-container:last-child {
+        border-right: none;
+      }
+
+      .graph-header {
+        background: white;
+        padding: 0.75rem;
+        border-bottom: 1px solid #eee;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .graph-content {
+        flex: 1;
+        position: relative;
+        background: white;
+        overflow: hidden;
+      }
+
+      .performance-indicator {
+        font-size: 0.8rem;
+        color: #666;
+      }
+
+      .performance-indicator.fast {
+        color: #4caf50;
+      }
+
+      .performance-indicator.slow {
+        color: #f44336;
+      }
+
+      .placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
         height: 100%;
+        color: #999;
+        font-size: 1.2rem;
+        text-align: center;
+      }
+
+      .placeholder-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+      }
+
+      .error {
+        color: #f44336;
+        background: #ffebee;
+        padding: 1rem;
+        margin: 1rem;
+        border-radius: 4px;
+        border-left: 4px solid #f44336;
       }
 
       .loading {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: white;
-        padding: 1rem 2rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        font-weight: 500;
-        color: #374151;
-        z-index: 1000;
+        color: #ff9800;
+        background: #fff3e0;
+        padding: 1rem;
+        margin: 1rem;
+        border-radius: 4px;
+        border-left: 4px solid #ff9800;
       }
     </style>
   </head>
-
   <body>
-    <div id="app">
-      <header class="header">
-        <h1>Polly Graph - Adaptive Simulation Demo</h1>
-        <p>Test the new configurable simulation system with different graph sizes</p>
+    <div class="header">
+      <h1>🎯 Polly Graph Demo - V1 vs V2 Performance Comparison</h1>
+      <div class="controls">
+        <div class="control-group">
+          <label for="dataset-select">Dataset:</label>
+          <select id="dataset-select">
+            <option value="tiny">Tiny (10 nodes)</option>
+            <option value="small" selected>Small (50 nodes)</option>
+            <option value="medium">Medium (100 nodes)</option>
+            <option value="large">Large (500 nodes)</option>
+            <option value="xl">XL (1,000 nodes)</option>
+            <option value="xxl">XXL (5,000 nodes)</option>
+            <option value="huge">Huge (25,000 nodes)</option>
+            <option value="massive">Massive (50,000 nodes)</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="topology-select">Topology:</label>
+          <select id="topology-select">
+            <option value="clustered" selected>Clustered (Realistic)</option>
+            <option value="random">Random</option>
+          </select>
+        </div>
+        <button id="generate-btn">Generate New Data</button>
+        <button id="reset-view-btn">Reset Views</button>
+      </div>
+      <div class="stats" id="stats">
+        Ready to generate graph data
+      </div>
+    </div>
 
-        <div class="controls">
-          <div class="graph-selector">
-            <label for="graph-size">Graph Size:</label>
-            <select id="graph-size">
-              <option value="knowledge-graph">Knowledge Graph - COVID-19 Research (15 nodes)</option>
-              <option value="small">Small Random (15 nodes) - Tight layout</option>
-              <option value="medium">Medium Random (75 nodes) - Balanced</option>
-              <option value="large">Large Random (250 nodes) - Sparse clusters</option>
-              <option value="extra-large">Extra Large Random (500 nodes) - Hub-spoke</option>
-            </select>
-          </div>
+    <div class="main-content">
+      <!-- V1 SVG Implementation -->
+      <div class="graph-container">
+        <div class="graph-header">
+          <span>V1 - SVG Implementation</span>
+          <span class="performance-indicator" id="v1-perf">Ready</span>
+        </div>
+        <div class="graph-content" id="v1-container"></div>
+      </div>
 
-          <div class="action-buttons">
-            <button id="load-graph" class="primary">Load Graph</button>
-            <button id="capture-btn">Export PNG</button>
-            <button id="reset-view">Reset View</button>
-            <button id="clear-selection">Clear Selection</button>
+      <!-- V2 Canvas Implementation -->
+      <div class="graph-container">
+        <div class="graph-header">
+          <span>V2 - Canvas Implementation</span>
+          <span class="performance-indicator" id="v2-perf">Coming Soon</span>
+        </div>
+        <div class="graph-content" id="v2-container">
+          <div class="placeholder">
+            <div class="placeholder-icon">🚧</div>
+            <div>V2 Canvas Implementation</div>
+            <div style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.7;">
+              Will be implemented after V2 requirements are complete
+            </div>
           </div>
         </div>
-      </header>
-
-      <div class="main-content">
-        <aside class="sidebar">
-          <h3>Simulation Configuration</h3>
-
-          <div class="config-section">
-            <h4>Graph Info</h4>
-            <div class="config-item">
-              <span class="label">Nodes:</span>
-              <span class="value" id="node-count">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Links:</span>
-              <span class="value" id="link-count">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Density:</span>
-              <span class="value" id="graph-density">-</span>
-            </div>
-          </div>
-
-          <div class="config-section">
-            <h4>Simulation Parameters</h4>
-            <div class="config-item">
-              <span class="label">Alpha:</span>
-              <span class="value" id="sim-alpha">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Alpha Decay:</span>
-              <span class="value" id="sim-alpha-decay">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Velocity Decay:</span>
-              <span class="value" id="sim-velocity-decay">-</span>
-            </div>
-          </div>
-
-          <div class="config-section">
-            <h4>Force Configuration</h4>
-            <div class="config-item">
-              <span class="label">Charge Strength:</span>
-              <span class="value" id="force-charge">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Link Strength:</span>
-              <span class="value" id="force-link-strength">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Link Distance:</span>
-              <span class="value" id="force-link-distance">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Center Strength:</span>
-              <span class="value" id="force-center">-</span>
-            </div>
-          </div>
-
-          <div class="config-section">
-            <h4>Current Selection</h4>
-            <div class="config-item">
-              <span class="label">Selected:</span>
-              <span class="value" id="selection-status">-</span>
-            </div>
-          </div>
-
-          <div class="performance-stats">
-            <h4>Performance</h4>
-            <div class="config-item">
-              <span class="label">Load Time:</span>
-              <span class="value" id="load-time">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Render Time:</span>
-              <span class="value" id="render-time">-</span>
-            </div>
-            <div class="config-item">
-              <span class="label">Warmup Ticks:</span>
-              <span class="value" id="warmup-ticks">-</span>
-            </div>
-          </div>
-        </aside>
-
-        <main class="graph-container">
-          <div id="loading" class="loading" style="display: none;">
-            Loading graph...
-          </div>
-          <div id="graph-viewport"></div>
-        </main>
       </div>
     </div>
 
