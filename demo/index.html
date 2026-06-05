@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Polly Graph Demo - V1 vs V2 Performance</title>
+    <title>Polly Graph Demo - V1 vs V2 Comparison</title>
     <style>
       * {
         margin: 0;
@@ -138,6 +138,38 @@
         color: #f44336;
       }
 
+      .version-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .version-toggle {
+        background: #059669;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .version-toggle:hover {
+        background: #047857;
+      }
+
+      .version-toggle:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
       .placeholder {
         display: flex;
         flex-direction: column;
@@ -176,7 +208,12 @@
   </head>
   <body>
     <div class="header">
-      <h1>🎯 Polly Graph Demo - V1 vs V2 Performance Comparison</h1>
+      <h1>🎯 Polly Graph Demo - V1 vs V2 Comparison</h1>
+      <p style="text-align: center; margin: 10px 0; color: #666; font-size: 14px;">
+        Interactive comparison between V1 (SVG) and V2 (Canvas) implementations using identical data and configuration.
+        <br><strong>✨ V2 Features:</strong> <span style="color: #3b82f6;">■</span> Always visible labels,
+        <span style="color: #10b981;">■</span> Hover-enabled labels - move mouse over links to see them appear!
+      </p>
       <div class="controls">
         <div class="control-group">
           <label for="dataset-select">Dataset:</label>
@@ -207,30 +244,16 @@
     </div>
 
     <div class="main-content">
-      <!-- V1 SVG Implementation -->
+      <!-- Single Graph Container with Version Toggle -->
       <div class="graph-container">
         <div class="graph-header">
-          <span>V1 - SVG Implementation</span>
-          <span class="performance-indicator" id="v1-perf">Ready</span>
-        </div>
-        <div class="graph-content" id="v1-container"></div>
-      </div>
-
-      <!-- V2 Canvas Implementation -->
-      <div class="graph-container">
-        <div class="graph-header">
-          <span>V2 - Canvas Implementation</span>
-          <span class="performance-indicator" id="v2-perf">Coming Soon</span>
-        </div>
-        <div class="graph-content" id="v2-container">
-          <div class="placeholder">
-            <div class="placeholder-icon">🚧</div>
-            <div>V2 Canvas Implementation</div>
-            <div style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.7;">
-              Will be implemented after V2 requirements are complete
-            </div>
+          <div class="version-info">
+            <span id="current-version">V1 - SVG Implementation</span>
+            <span class="performance-indicator" id="performance">Ready</span>
           </div>
+          <button id="toggle-version" class="version-toggle">Switch to V2 Canvas</button>
         </div>
+        <div class="graph-content" id="graph-container"></div>
       </div>
     </div>
 

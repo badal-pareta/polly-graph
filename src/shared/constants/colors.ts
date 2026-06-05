@@ -34,4 +34,5 @@ export enum NeutralColor {
 export enum StandardColor {
   WHITE = '#ffffff',
   BLACK = '#000000',
+  NEUTRAL = '#808080'
 }

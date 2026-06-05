@@ -5,7 +5,11 @@
 
 // Import V1 implementation
 import { createGraph } from '../../src/v1';
-import type { GraphInstance } from '../../src/v1/contracts/graph-instance.interface';
+import type { GraphInstance as V1GraphInstance } from '../../src/v1/contracts/graph-instance.interface';
+
+// Import V2 implementation (V1-compatible wrapper)
+import { createGraph as createV2Graph } from '../../src/v2';
+import type { GraphInstance as V2GraphInstance } from '../../src/v2';
 
 // Import data generator with V1 types
 import { generateGraphData, GENERATED_DATASETS, type DatasetName, type TestGraphData } from './data/generate-data';
@@ -22,11 +26,10 @@ interface PerformanceMetrics {
 }
 
 class PollyGraphDemo {
-  private v1Graph: GraphInstance | null = null;
-  // private v2Graph: any | null = null; // Placeholder for V2
+  private currentGraph: V1GraphInstance | V2GraphInstance | null = null;
+  private currentVersion: 'v1' | 'v2' = 'v1';
   private currentData: TestGraphData | null = null;
-  private v1Metrics: PerformanceMetrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
-  // private v2Metrics: PerformanceMetrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
+  private metrics: PerformanceMetrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
 
   private elements = {
     datasetSelect: document.getElementById('dataset-select') as HTMLSelectElement,
@@ -34,14 +37,15 @@ class PollyGraphDemo {
     generateBtn: document.getElementById('generate-btn') as HTMLButtonElement,
     resetViewBtn: document.getElementById('reset-view-btn') as HTMLButtonElement,
     stats: document.getElementById('stats') as HTMLDivElement,
-    v1Container: document.getElementById('v1-container') as HTMLDivElement,
-    v2Container: document.getElementById('v2-container') as HTMLDivElement,
-    v1Perf: document.getElementById('v1-perf') as HTMLSpanElement,
-    v2Perf: document.getElementById('v2-perf') as HTMLSpanElement
+    container: document.getElementById('graph-container') as HTMLDivElement,
+    currentVersion: document.getElementById('current-version') as HTMLSpanElement,
+    performance: document.getElementById('performance') as HTMLSpanElement,
+    toggleVersion: document.getElementById('toggle-version') as HTMLButtonElement
   };
 
   constructor() {
     this.setupEventListeners();
+    this.setupCleanupHandlers();
     this.generateInitialData();
   }
 
@@ -51,7 +55,7 @@ class PollyGraphDemo {
     });
 
     this.elements.resetViewBtn.addEventListener('click', () => {
-      this.resetViews();
+      this.resetView();
     });
 
     this.elements.datasetSelect.addEventListener('change', () => {
@@ -61,6 +65,60 @@ class PollyGraphDemo {
     this.elements.topologySelect.addEventListener('change', () => {
       this.generateNewData();
     });
+
+    this.elements.toggleVersion.addEventListener('click', () => {
+      this.toggleVersion();
+    });
+  }
+
+  private setupCleanupHandlers() {
+    // Cleanup on page unload to prevent memory leaks
+    window.addEventListener('beforeunload', () => {
+      this.destroy();
+    });
+
+    // Cleanup on visibility change (when user switches tabs)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Pause any ongoing animations or processes when tab is hidden
+        if (this.currentGraph) {
+          // Most graph libraries have a pause/stop method
+          try {
+            (this.currentGraph as any).pause?.();
+          } catch (e) {
+            // Ignore if pause method doesn't exist
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Clean up all resources to prevent memory leaks
+   */
+  private destroy() {
+    try {
+      // Destroy current graph and remove event listeners
+      if (this.currentGraph) {
+        this.removeGraphEventListeners();
+        this.currentGraph.destroy();
+        this.currentGraph = null;
+      }
+
+      // Clear container
+      if (this.elements.container) {
+        this.elements.container.innerHTML = '';
+      }
+
+      // Clear data references
+      this.currentData = null;
+
+      // Reset metrics
+      this.metrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
+
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
   }
 
   private generateInitialData() {
@@ -77,7 +135,7 @@ class PollyGraphDemo {
       const loadTime = performance.now() - startTime;
 
       this.updateStats(`Loaded ${selectedDataset} dataset`, loadTime);
-      this.renderGraphs();
+      this.renderCurrentGraph();
     } catch (error) {
       this.showError(`Failed to load preset data: ${error}`);
     }
@@ -104,7 +162,7 @@ class PollyGraphDemo {
         const loadTime = performance.now() - startTime;
 
         this.updateStats(`Generated ${selectedDataset} dataset (${topology})`, loadTime);
-        this.renderGraphs();
+        this.renderCurrentGraph();
       } catch (error) {
         this.showError(`Failed to generate data: ${error}`);
       } finally {
@@ -141,42 +199,43 @@ class PollyGraphDemo {
     return connections[dataset];
   }
 
-  private async renderGraphs() {
+  private async renderCurrentGraph() {
     if (!this.currentData) {
       this.showError('No data available to render');
       return;
     }
 
-    // Render V1 graph
-    await this.renderV1Graph();
-
-    // V2 would be rendered here when implemented
-    this.showV2Placeholder();
+    if (this.currentVersion === 'v1') {
+      await this.renderV1Graph();
+    } else {
+      await this.renderV2Graph();
+    }
   }
 
   private async renderV1Graph(): Promise<void> {
     if (!this.currentData) return;
 
     try {
-      this.elements.v1Perf.textContent = 'Rendering...';
-      this.elements.v1Perf.className = 'performance-indicator';
+      this.elements.performance.textContent = 'Rendering V1...';
+      this.elements.performance.className = 'performance-indicator';
 
       const startTime = performance.now();
 
-      // Cleanup existing graph
-      if (this.v1Graph) {
-        this.v1Graph.destroy();
-        this.v1Graph = null;
+      // Cleanup existing graph and its event listeners
+      if (this.currentGraph) {
+        this.removeGraphEventListeners();
+        this.currentGraph.destroy();
+        this.currentGraph = null;
       }
 
       // Clear container
-      this.elements.v1Container.innerHTML = '';
+      this.elements.container.innerHTML = '';
 
       const initStart = performance.now();
 
       // Create V1 graph
-      this.v1Graph = createGraph({
-        container: this.elements.v1Container,
+      this.currentGraph = createGraph({
+        container: this.elements.container,
         nodes: this.currentData.nodes,
         links: this.currentData.links,
         controls: CONTROLS_CONFIG,
@@ -191,66 +250,202 @@ class PollyGraphDemo {
 
       // Render the graph
       const renderStart = performance.now();
-      await this.v1Graph.render();
+      await this.currentGraph.render();
       const renderTime = performance.now() - renderStart;
 
       const totalTime = performance.now() - startTime;
 
       // Update metrics
-      this.v1Metrics = {
+      this.metrics = {
         renderTime,
         initTime,
         dataLoadTime: 0, // Already tracked elsewhere
         lastUpdate: Date.now()
       };
 
-      // Update performance indicator
-      this.updateV1Performance(totalTime);
+      // Update performance indicator and version info
+      this.updatePerformance(totalTime);
+      this.elements.currentVersion.textContent = 'V1 - SVG Implementation';
 
     } catch (error) {
       this.showError(`V1 render failed: ${error}`);
-      this.elements.v1Perf.textContent = 'Error';
-      this.elements.v1Perf.className = 'performance-indicator slow';
+      this.elements.performance.textContent = 'Error';
+      this.elements.performance.className = 'performance-indicator slow';
     }
   }
 
   private configureV1Graph() {
-    if (!this.v1Graph) return;
+    if (!this.currentGraph) return;
 
-    // Add event listeners for demonstration
-    this.v1Graph.on('nodeSelect', (node) => {
+    // Add event listeners for demonstration (stored for cleanup)
+    const nodeSelectHandler = (node: any) => {
       console.log('V1 - Node selected:', node);
-    });
+    };
 
-    this.v1Graph.on('linkSelect', (link) => {
+    const linkSelectHandler = (link: any) => {
       console.log('V1 - Link selected:', link);
-    });
+    };
+
+    this.currentGraph.on('nodeSelect', nodeSelectHandler);
+    this.currentGraph.on('linkSelect', linkSelectHandler);
+
+    // Store handlers for cleanup
+    (this.currentGraph as any).__eventHandlers = {
+      nodeSelect: nodeSelectHandler,
+      linkSelect: linkSelectHandler
+    };
   }
 
-  private showV2Placeholder() {
-    // V2 placeholder is already in HTML
-    this.elements.v2Perf.textContent = 'Coming Soon';
-    this.elements.v2Perf.className = 'performance-indicator';
+  private configureV2Graph() {
+    if (!this.currentGraph) return;
+
+    // Add event listeners for demonstration (stored for cleanup)
+    const nodeSelectHandler = (node: any) => {
+      console.log('V2 - Node selected:', node);
+    };
+
+    const linkSelectHandler = (link: any) => {
+      console.log('V2 - Link selected:', link);
+    };
+
+    this.currentGraph.on('nodeSelect', nodeSelectHandler);
+    this.currentGraph.on('linkSelect', linkSelectHandler);
+
+    // Store handlers for cleanup
+    (this.currentGraph as any).__eventHandlers = {
+      nodeSelect: nodeSelectHandler,
+      linkSelect: linkSelectHandler
+    };
   }
 
-  private updateV1Performance(totalTime: number) {
+  /**
+   * Remove all graph event listeners to prevent memory leaks
+   */
+  private removeGraphEventListeners() {
+    if (!this.currentGraph) return;
+
+    try {
+      const handlers = (this.currentGraph as any).__eventHandlers;
+      if (handlers) {
+        // Remove specific handlers if available
+        if (this.currentGraph.off) {
+          this.currentGraph.off('nodeSelect', handlers.nodeSelect);
+          this.currentGraph.off('linkSelect', handlers.linkSelect);
+        }
+        // Clear stored handlers
+        delete (this.currentGraph as any).__eventHandlers;
+      }
+
+      // Fallback: try to remove all listeners if the library supports it
+      if ((this.currentGraph as any).removeAllListeners) {
+        (this.currentGraph as any).removeAllListeners();
+      }
+    } catch (error) {
+      console.warn('Could not remove graph event listeners:', error);
+    }
+  }
+
+  private async renderV2Graph(): Promise<void> {
+    if (!this.currentData) return;
+
+    try {
+      this.elements.performance.textContent = 'Rendering V2...';
+      this.elements.performance.className = 'performance-indicator';
+
+      const startTime = performance.now();
+
+      // Cleanup existing graph and its event listeners
+      if (this.currentGraph) {
+        this.removeGraphEventListeners();
+        this.currentGraph.destroy();
+        this.currentGraph = null;
+      }
+
+      // Clear container
+      this.elements.container.innerHTML = '';
+
+      const initStart = performance.now();
+
+      // Create V2 graph using V1-compatible API
+      this.currentGraph = createV2Graph({
+        container: this.elements.container,
+        nodes: this.currentData.nodes,
+        links: this.currentData.links,
+        controls: CONTROLS_CONFIG,
+        legend: LEGEND_CONFIG,
+        interaction: INTERACTION_CONFIG
+      });
+
+      const initTime = performance.now() - initStart;
+
+      // Configure graph styling
+      this.configureV2Graph();
+
+      // Render the graph
+      const renderStart = performance.now();
+      await this.currentGraph.render();
+      const renderTime = performance.now() - renderStart;
+
+      const totalTime = performance.now() - startTime;
+
+      // Update metrics
+      this.metrics = {
+        renderTime,
+        initTime,
+        dataLoadTime: 0, // Already tracked elsewhere
+        lastUpdate: Date.now()
+      };
+
+      // Update performance indicator and version info
+      this.updatePerformance(totalTime);
+      this.elements.currentVersion.textContent = 'V2 - Canvas Implementation';
+
+      // Show info about V2 features (link labels) for a few seconds
+      this.showV2FeatureInfo();
+
+      // Log link label statistics for demo
+      this.logLinkLabelStats();
+
+    } catch (error) {
+      this.showError(`V2 render failed: ${error}`);
+      this.elements.performance.textContent = 'Error';
+      this.elements.performance.className = 'performance-indicator slow';
+    }
+  }
+
+  private updatePerformance(totalTime: number) {
     const timeText = totalTime < 1000 ?
       `${Math.round(totalTime)}ms` :
       `${(totalTime / 1000).toFixed(1)}s`;
 
-    this.elements.v1Perf.textContent = timeText;
-    this.elements.v1Perf.className = totalTime < 500 ?
+    this.elements.performance.textContent = timeText;
+    this.elements.performance.className = totalTime < 500 ?
       'performance-indicator fast' :
       totalTime < 2000 ?
         'performance-indicator' :
         'performance-indicator slow';
   }
 
-  private resetViews() {
-    if (this.v1Graph) {
-      this.v1Graph.fitView();
+  private toggleVersion() {
+    this.elements.toggleVersion.disabled = true;
+
+    // Toggle version
+    this.currentVersion = this.currentVersion === 'v1' ? 'v2' : 'v1';
+
+    // Update button text
+    this.elements.toggleVersion.textContent =
+      this.currentVersion === 'v1' ? 'Switch to V2 Canvas' : 'Switch to V1 SVG';
+
+    // Re-render with current data
+    this.renderCurrentGraph().finally(() => {
+      this.elements.toggleVersion.disabled = false;
+    });
+  }
+
+  private resetView() {
+    if (this.currentGraph) {
+      this.currentGraph.fitView();
     }
-    // V2 reset would go here when implemented
   }
 
   private updateStats(message: string, loadTime?: number) {
@@ -275,6 +470,47 @@ class PollyGraphDemo {
     this.elements.stats.innerHTML = `<div class="error">${message}</div>`;
     console.error(message);
   }
+
+  private showV2FeatureInfo() {
+    // Create a temporary info message about link labels
+    const originalStats = this.elements.stats.innerHTML;
+
+    this.elements.stats.innerHTML = `
+      <div style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 12px; border-radius: 6px; text-align: center; animation: fadeIn 0.3s ease-in;">
+        <strong>🎯 V2 Canvas Features Active!</strong><br>
+        <span style="font-size: 13px;">
+          📍 Hover over links to see labels appear
+          • <span style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;">Blue labels</span> always visible
+          • <span style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;">Green labels</span> on hover
+        </span>
+      </div>
+    `;
+
+    // Restore original stats after 4 seconds
+    setTimeout(() => {
+      this.elements.stats.innerHTML = originalStats;
+    }, 4000);
+  }
+
+  private logLinkLabelStats() {
+    if (!this.currentData) return;
+
+    const linksWithLabels = this.currentData.links.filter(link => link.label);
+    const alwaysVisible = linksWithLabels.filter(link =>
+      link.style?.label?.visibility === 'always' || !link.style?.label?.visibility
+    );
+    const hoverOnly = linksWithLabels.filter(link =>
+      link.style?.label?.visibility === 'hover'
+    );
+
+    console.group('🏷️ V2 Link Labels Demo Statistics');
+    console.log(`📊 Total links: ${this.currentData.links.length}`);
+    console.log(`🏷️ Links with labels: ${linksWithLabels.length} (${Math.round(linksWithLabels.length / this.currentData.links.length * 100)}%)`);
+    console.log(`🔵 Always visible: ${alwaysVisible.length}`);
+    console.log(`🟢 Hover-enabled: ${hoverOnly.length}`);
+    console.log(`💡 Tip: Hover over links to see green labels appear!`);
+    console.groupEnd();
+  }
 }
 
 // Initialize the demo when DOM is loaded
@@ -288,9 +524,32 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Add some global debugging helpers
+// Add some global debugging helpers with memory management
 (window as any).pollyDemo = {
   generateCustomData: (nodes: number, connections: number = 3, clustered: boolean = true) => {
     return generateGraphData(nodes, connections, clustered);
+  },
+
+  // Debug memory usage
+  getMemoryInfo: () => {
+    if ((performance as any).memory) {
+      const memory = (performance as any).memory;
+      return {
+        usedJSHeapSize: (memory.usedJSHeapSize / 1048576).toFixed(2) + ' MB',
+        totalJSHeapSize: (memory.totalJSHeapSize / 1048576).toFixed(2) + ' MB',
+        jsHeapSizeLimit: (memory.jsHeapSizeLimit / 1048576).toFixed(2) + ' MB'
+      };
+    }
+    return 'Memory info not available';
+  },
+
+  // Force garbage collection if available (Chrome DevTools)
+  forceGC: () => {
+    if ((window as any).gc) {
+      (window as any).gc();
+      console.log('Garbage collection forced');
+    } else {
+      console.log('Garbage collection not available. Use Chrome DevTools with --enable-precise-memory-info');
+    }
   }
 };

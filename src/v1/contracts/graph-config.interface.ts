@@ -1,6 +1,6 @@
 import { GraphControlsConfig } from './graph-controls.interface';
 import { LegendConfig } from './graph-legends.interface';
-import { GraphNode, GraphLink, NodeStyle, LinkStyle } from './graph.types';
+import { GraphNode, GraphLink, NodeStyle, LinkStyle } from '../../shared/contracts/graph.types';
 import { EnhancedSimulationConfig } from './simulation.interface';
 
 export type GraphTooltipTheme = 'dark' | 'light';
@@ -12,7 +12,7 @@ export type LinkSelectHandler = (link: GraphLink, element: SVGLineElement) => vo
 export interface TooltipInteractionConfig {
   readonly enabled?: boolean;
   readonly theme?: GraphTooltipTheme;
-  readonly placement?: TooltipPlacement; 
+  readonly placement?: TooltipPlacement;
   readonly renderContent?: (node: GraphNode) => string;
 }
 

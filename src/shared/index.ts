@@ -8,3 +8,6 @@ export * from './constants';
 
 // Export all icons
 export * from './icons';
+
+// Export all contracts (types and interfaces)
+export * from './contracts';

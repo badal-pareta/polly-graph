@@ -192,23 +192,52 @@ function generateRandomLinks(nodes: GraphNode[], links: GraphLink[], avgConnecti
   }
 }
 
+// Relationship types for more meaningful labels
+const RELATIONSHIP_TYPES = [
+  'connects to', 'depends on', 'sends data to', 'manages', 'monitors',
+  'authenticates with', 'routes to', 'processes', 'triggers', 'syncs with'
+];
+
 /**
- * Creates a link with random properties using V1 GraphLink structure
+ * Creates a link with hover-enabled labels and meaningful relationship types
  */
 function createLink(source: GraphNode, target: GraphNode): GraphLink {
   const strokeWidth = Math.random() * 3 + 0.5; // Random width 0.5-3.5
-  const hasLabel = Math.random() < 0.3; // 30% chance of having a label
+  const hasLabel = Math.random() < 0.6; // 60% chance of having a label for demo
 
-  return {
+  // Choose relationship type based on node types
+  const relationship = RELATIONSHIP_TYPES[Math.floor(Math.random() * RELATIONSHIP_TYPES.length)];
+
+  // Determine label visibility mode
+  const labelModes = ['always', 'hover', 'hover', 'hover']; // 75% hover, 25% always
+  const labelVisibility = labelModes[Math.floor(Math.random() * labelModes.length)];
+
+  const link: GraphLink = {
     source: source.id,
     target: target.id,
-    label: hasLabel ? `Link ${source.id.split('-')[1]}-${target.id.split('-')[1]}` : undefined,
-    tooltip: hasLabel ? `Connection: ${source.type} → ${target.type}` : undefined,
+    label: hasLabel ? relationship : undefined,
+    tooltip: hasLabel ? `${source.type} ${relationship} ${target.type}` : undefined,
     style: {
       strokeWidth,
-      stroke: strokeWidth > 2 ? DEFAULT_COLORS.interaction.linkSelected : DEFAULT_COLORS.links.default
+      stroke: strokeWidth > 2 ? DEFAULT_COLORS.interaction.linkSelected : DEFAULT_COLORS.links.default,
+      // Add label styling for V2 with hover mode
+      label: hasLabel ? {
+        enabled: true,
+        visibility: labelVisibility as 'always' | 'hover' | 'selection',
+        backgroundColor: labelVisibility === 'always' ?
+          '#dbeafe' : '#d1fae5', // Blue for always, green for hover (solid colors)
+        textColor: labelVisibility === 'always' ? '#1e40af' : '#047857',
+        borderColor: labelVisibility === 'always' ? '#3b82f6' : '#10b981',
+        borderWidth: 1,
+        borderRadius: 4,
+        paddingX: 6,
+        paddingY: 3,
+        fontSize: 10
+      } : undefined
     }
   };
+
+  return link;
 }
 
 // Predefined dataset sizes for testing
