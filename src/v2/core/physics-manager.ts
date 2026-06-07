@@ -9,11 +9,14 @@ import {
   forceLink as d3ForceLink,
   forceManyBody as d3ForceManyBody,
   forceCenter as d3ForceCenter,
-  Simulation
+  Simulation,
+  ForceLink,
+  ForceManyBody,
+  ForceCenter
 } from 'd3-force';
 
 import { V2Node, V2Link } from '../types';
-import { ErrorHandler, ValidationError } from '../utils';
+import { ErrorHandler, ValidationError, TimerManager } from '../utils';
 
 export interface PhysicsConfig {
   nodes: V2Node[];
@@ -33,6 +36,11 @@ export class PhysicsManager {
   private simulationEndTime?: number;
   private cooldownTimer?: number;
   private hasInitialAutoFitCompleted = false;
+  private timerManager: TimerManager;
+
+  constructor(timerManager: TimerManager) {
+    this.timerManager = timerManager;
+  }
 
   /**
    * Initialize physics simulation
@@ -49,7 +57,41 @@ export class PhysicsManager {
       this.config = config;
       this.simulationStartTime = performance.now();
 
-      // Create D3 force simulation with better spacing parameters
+      // Calculate adaptive force strengths based on node count and graph density
+      const nodeCount = config.nodes.length;
+      const linkCount = config.links.length;
+      const graphArea = config.width * config.height;
+
+      // Adaptive charge strength: reduce repulsion for dense graphs
+      const baseChargeStrength = -600; // Reduced base from -800
+
+      // Calculate true density: nodes per unit area (normalized to 100k pixel units)
+      const nodeDensity = nodeCount / (graphArea / 100000); // Nodes per 100k pixels
+      const densityFactor = Math.min(nodeDensity, 2); // Cap at 2x adjustment
+      const adaptiveChargeStrength = baseChargeStrength / (1 + densityFactor * 0.4);
+
+      // Adaptive velocity decay: faster settling for dense graphs
+      const baseVelocityDecay = 0.4;
+      const adaptiveVelocityDecay = Math.min(baseVelocityDecay + (densityFactor * 0.2), 0.8);
+
+      // Adaptive alpha decay: faster cooling for dense graphs
+      const baseAlphaDecay = 0.02;
+      const adaptiveAlphaDecay = Math.min(baseAlphaDecay + (densityFactor * 0.01), 0.05);
+
+      // Debug logging for adaptive physics (can be removed in production)
+      console.log('🔬 Adaptive Physics:', {
+        nodeCount,
+        linkCount,
+        graphArea: Math.round(graphArea),
+        nodeDensity: nodeDensity.toFixed(3),
+        densityFactor: densityFactor.toFixed(2),
+        chargeStrength: adaptiveChargeStrength.toFixed(0),
+        velocityDecay: adaptiveVelocityDecay.toFixed(2),
+        alphaDecay: adaptiveAlphaDecay.toFixed(3),
+        maxDistance: Math.max(300, 600 - densityFactor * 100)
+      });
+
+      // Create D3 force simulation with adaptive parameters
       this.simulation = d3ForceSimulation<V2Node>(config.nodes)
         .force('link', d3ForceLink<V2Node, V2Link>(config.links)
           .id((d: V2Node) => d.id)
@@ -57,15 +99,15 @@ export class PhysicsManager {
           .strength(0.2) // Much weaker link strength to allow repulsion to work
         )
         .force('charge', d3ForceManyBody()
-          .strength(-800) // Much stronger repulsion to overcome multiple link forces
+          .strength(adaptiveChargeStrength) // Adaptive repulsion strength
           .distanceMin(1) // Minimum distance for repulsion
-          .distanceMax(600) // Increase max distance for wider repulsion effect
+          .distanceMax(Math.max(300, 600 - densityFactor * 100)) // Reduce max distance for dense graphs
         )
-        .force('center', d3ForceCenter(config.width / 2, config.height / 2)
-          .strength(0.1) // Reduce center force to allow more spread
+        .force('center', d3ForceCenter(0, 0)
+          .strength(0.1) // Center around origin like force-graph
         )
-        .velocityDecay(0.4) // Increase velocity decay for faster settling
-        .alphaDecay(0.02) // Slightly slower alpha decay for better convergence
+        .velocityDecay(adaptiveVelocityDecay) // Adaptive velocity decay for faster settling
+        .alphaDecay(adaptiveAlphaDecay) // Adaptive alpha decay for better convergence
         .on('tick', config.onTick)
         .on('end', () => this.handleSimulationEnd());
 
@@ -118,13 +160,9 @@ export class PhysicsManager {
 
     try {
       // Clear any existing timer
-      if (this.cooldownTimer) {
-        clearTimeout(this.cooldownTimer);
-      }
+      this.timerManager.clearTimer('simulationCooldown');
 
-      const startAlpha = this.simulation.alpha();
-
-      this.cooldownTimer = window.setTimeout(() => {
+      this.timerManager.setTimeout('simulationCooldown', () => {
         if (this.simulation && this.simulation.alpha() > 0) {
           this.simulation.stop();
           this.handleSimulationEnd();
@@ -190,34 +228,49 @@ export class PhysicsManager {
 
     try {
       if (options.linkStrength !== undefined) {
-        const linkForce = this.simulation.force('link') as any;
+        const linkForce = this.simulation.force('link') as ForceLink<V2Node, V2Link> | undefined;
         if (linkForce) {
           linkForce.strength(options.linkStrength);
         }
       }
 
       if (options.linkDistance !== undefined) {
-        const linkForce = this.simulation.force('link') as any;
+        const linkForce = this.simulation.force('link') as ForceLink<V2Node, V2Link> | undefined;
         if (linkForce) {
           linkForce.distance(options.linkDistance);
         }
       }
 
       if (options.chargeStrength !== undefined) {
-        const chargeForce = this.simulation.force('charge') as any;
+        const chargeForce = this.simulation.force('charge') as ForceManyBody<V2Node> | undefined;
         if (chargeForce) {
           chargeForce.strength(options.chargeStrength);
         }
       }
 
       if (options.centerStrength !== undefined) {
-        const centerForce = this.simulation.force('center') as any;
+        const centerForce = this.simulation.force('center') as ForceCenter<V2Node> | undefined;
         if (centerForce) {
           centerForce.strength(options.centerStrength);
         }
       }
     } catch (error) {
       ErrorHandler.logError(error as Error, options);
+    }
+  }
+
+  /**
+   * Update center force position for new canvas dimensions
+   * Following force-graph pattern for container resizing
+   */
+  updateCenterForce(x: number, y: number): void {
+    if (!this.simulation) return;
+
+    try {
+      // Update center force to new canvas center following V1 pattern
+      this.simulation.force('center', d3ForceCenter(x, y).strength(0.1));
+    } catch (error) {
+      ErrorHandler.logError(error as Error, { x, y });
     }
   }
 
@@ -229,7 +282,7 @@ export class PhysicsManager {
 
     try {
       // Calculate distance function that accounts for node radii + arrow lengths
-      const linkForce = this.simulation.force('link') as any;
+      const linkForce = this.simulation.force('link') as ForceLink<V2Node, V2Link> | undefined;
       if (linkForce) {
         linkForce.distance((link: V2Link) => {
           // Dynamic base distance calculation
@@ -285,22 +338,19 @@ export class PhysicsManager {
    */
   private getNodeRadius(node: V2Node | undefined): number {
     if (!node) return 20; // Default radius
-
-    // Check if node has style.radius
-    const nodeStyle = (node as any).style;
-    return nodeStyle?.radius ?? 20; // Default to 20 (KG component default)
+    return node.style?.radius ?? 20; // Default to 20 (KG component default)
   }
 
   /**
    * Get arrow length from link style or default
    */
   private getLinkArrowLength(link: V2Link): number {
-    const linkStyle = (link as any).style;
+    const linkStyle = link.style;
     const arrowEnabled = linkStyle?.arrow?.enabled !== false; // Default enabled
 
     if (!arrowEnabled) return 0;
 
-    return linkStyle?.arrow?.length ?? 8; // Default to 8 (updated default)
+    return linkStyle?.arrow?.size ?? 8; // Default to 8 (updated default)
   }
 
   /**
@@ -363,30 +413,28 @@ export class PhysicsManager {
   }
 
   /**
-   * Get simulation statistics
+   * Check if simulation is currently running
    */
-  getStats(): {
-    alpha: number;
-    alphaTarget: number;
-    alphaDecay: number;
-    velocityDecay: number;
-    nodeCount: number;
-    linkCount: number;
-    timing: ReturnType<typeof this.getSimulationTiming>;
-  } {
-    if (!this.simulation || !this.config) {
-      throw new ValidationError('Physics manager not initialized');
-    }
+  isSimulationRunning(): boolean {
+    return !!(this.simulation && this.simulation.alpha() > 0);
+  }
 
-    return {
-      alpha: this.simulation.alpha(),
-      alphaTarget: this.simulation.alphaTarget(),
-      alphaDecay: this.simulation.alphaDecay(),
-      velocityDecay: this.simulation.velocityDecay(),
-      nodeCount: this.config.nodes.length,
-      linkCount: this.config.links.length,
-      timing: this.getSimulationTiming()
-    };
+  /**
+   * Pause the simulation
+   */
+  pause(): void {
+    if (this.simulation) {
+      this.simulation.stop();
+    }
+  }
+
+  /**
+   * Resume the simulation
+   */
+  resume(): void {
+    if (this.simulation) {
+      this.simulation.restart();
+    }
   }
 
   /**
@@ -394,11 +442,9 @@ export class PhysicsManager {
    */
   destroy(): void {
     try {
-      // Clear cooldown timer
-      if (this.cooldownTimer) {
-        clearTimeout(this.cooldownTimer);
-        this.cooldownTimer = undefined;
-      }
+      // Clear cooldown timer using TimerManager
+      this.timerManager.clearTimer('simulationCooldown');
+      this.cooldownTimer = undefined;
 
       if (this.simulation) {
         this.simulation.stop();

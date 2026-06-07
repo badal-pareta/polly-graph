@@ -84,9 +84,9 @@ export class SelectionManager {
       const obj = this.getObjUnderPointer(x, y);
 
       if (obj) {
-        if (obj.type === 'Node') {
+        if (obj.d.entityType === 'Node') {
           this.selectNode(obj.d as V2Node);
-        } else if (obj.type === 'Link') {
+        } else if (obj.d.entityType === 'Link') {
           this.selectLink(obj.d as V2Link);
         }
       } else {
@@ -119,7 +119,9 @@ export class SelectionManager {
 
       // Lookup object per pixel color
       if (px && px.data.length >= 3) {
-        return colorTracker.lookup(px.data);
+        // Convert Uint8ClampedArray to RGB array for canvas-color-tracker
+        const rgb: [number, number, number] = [px.data[0] ?? 0, px.data[1] ?? 0, px.data[2] ?? 0];
+        return colorTracker.lookup(rgb);
       }
 
       return null;

@@ -1,0 +1,8 @@
+/**
+ * V2 Canvas Graph - Main CSS
+ *
+ * Includes all necessary styles for V2 Canvas implementation
+ */
+
+@import './graph-controls.css';
+@import './graph-legends.css';

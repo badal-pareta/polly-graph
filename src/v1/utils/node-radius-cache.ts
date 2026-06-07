@@ -7,6 +7,14 @@ export interface NodeRadiusCache {
   destroy(): void;
 }
 
+interface NodeDatum {
+  id?: string;
+}
+
+type CircleWithData = SVGCircleElement & {
+  __data__?: NodeDatum;
+};
+
 class NodeRadiusCacheImpl implements NodeRadiusCache {
   private cache = new Map<string, number>();
   private domObserver?: MutationObserver;
@@ -61,7 +69,7 @@ class NodeRadiusCacheImpl implements NodeRadiusCache {
     const dataNodeId = element.getAttribute('data-node-id');
     if (dataNodeId) return dataNodeId;
 
-    const boundData = (element as SVGCircleElement & { __data__: any }).__data__;
+    const boundData = (element as CircleWithData).__data__;
     return boundData?.id || null;
   }
 
@@ -98,7 +106,7 @@ export function getNodeRadiusWithCache(
   if (!circle) {
     const circles = Array.from(document.querySelectorAll('circle'));
     for (const c of circles) {
-      const boundData = (c as SVGCircleElement & { __data__: any }).__data__;
+      const boundData = (c as CircleWithData).__data__;
       if (boundData?.id === nodeId) {
         circle = c;
         break;

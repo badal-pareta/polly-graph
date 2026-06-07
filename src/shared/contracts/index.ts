@@ -5,3 +5,4 @@
 
 export * from './graph.types';
 export * from './graph-config.interface';
+export * from './graph-controls.interface';

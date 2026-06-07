@@ -44,6 +44,7 @@ export class HoverManager {
   private refreshShadowCanvas?: () => void;
   private flushShadowCanvas?: () => void;
   private hasValidPointerPosition = false;
+  private containerWarningLogged = false;
 
   /**
    * Initialize hover manager with force-graph pattern
@@ -82,29 +83,48 @@ export class HoverManager {
     this.hoverState.pointerPosition = { x: -1e12, y: -1e12 };
 
     // Capture pointer coords on move or touchstart (force-graph lines 522-551)
-    ['pointermove', 'pointerdown'].forEach(evType =>
-      this.container!.addEventListener(evType, (ev: Event) => {
+    ['pointermove', 'pointerdown'].forEach(evType => {
+      if (!this.container) {
+        console.error('Cannot add pointer event listeners - container is null');
+        return;
+      }
+
+      this.container.addEventListener(evType, (ev: Event) => {
         const pointerEvent = ev as PointerEvent;
         // Update the pointer pos (force-graph pattern)
-        if (!this.container) {
-          console.warn('Container not available for pointer tracking');
+        const container = this.container;
+        if (!container) {
+          // Reduced logging - only warn once per session instead of per event
+          if (!this.containerWarningLogged) {
+            console.warn('Container not available for pointer tracking - events may be delayed');
+            this.containerWarningLogged = true;
+          }
           return;
         }
-        const offset = this.getOffset(this.container);
-        const newX = pointerEvent.pageX - offset.left;
-        const newY = pointerEvent.pageY - offset.top;
 
-        // Store in hover state
-        this.hoverState.pointerPosition = { x: newX, y: newY };
-        this.hasValidPointerPosition = true;
+        try {
+          const offset = this.getOffset(container);
+          const newX = pointerEvent.pageX - offset.left;
+          const newY = pointerEvent.pageY - offset.top;
 
-        // Update hover immediately when pointer moves
-        if (evType === 'pointermove') {
-          this.updateHover();
+          // Store in hover state
+          this.hoverState.pointerPosition = { x: newX, y: newY };
+          this.hasValidPointerPosition = true;
+
+          // Update hover immediately when pointer moves
+          if (evType === 'pointermove') {
+            this.updateHover();
+          }
+        } catch (error) {
+          // Silently handle errors to avoid spam
+          if (!this.containerWarningLogged) {
+            console.warn('Error in pointer tracking:', error);
+            this.containerWarningLogged = true;
+          }
         }
 
-      }, { passive: true })
-    );
+      }, { passive: true });
+    });
   }
 
   /**
@@ -112,13 +132,18 @@ export class HoverManager {
    */
   private getOffset(el: HTMLElement): { top: number; left: number } {
     if (!el) {
-      console.error('getOffset called with null/undefined element');
       return { top: 0, left: 0 };
     }
-    const rect = el.getBoundingClientRect();
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    return { top: rect.top + scrollTop, left: rect.left + scrollLeft };
+
+    try {
+      const rect = el.getBoundingClientRect();
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      return { top: rect.top + scrollTop, left: rect.left + scrollLeft };
+    } catch {
+      // Fallback for detached elements
+      return { top: 0, left: 0 };
+    }
   }
 
   /**
@@ -132,7 +157,7 @@ export class HoverManager {
     }, HOVER_CANVAS_THROTTLE_DELAY);
 
     // Hook to immediately invoke shadow canvas paint (force-graph line 609)
-    this.flushShadowCanvas = (this.refreshShadowCanvas as any).flush;
+    this.flushShadowCanvas = (this.refreshShadowCanvas as { flush?: () => void }).flush;
   }
 
   /**
@@ -186,8 +211,12 @@ export class HoverManager {
 
       // Lookup object per pixel color (force-graph lines 393-394)
       if (px && px.data.length >= 3) {
-        // Force-graph passes px.data directly, which is Uint8ClampedArray
-        obj = colorTracker.lookup(px.data);
+        // Convert to RGB array for canvas-color-tracker with safety checks
+        const r = px.data[0] ?? 0;
+        const g = px.data[1] ?? 0;
+        const b = px.data[2] ?? 0;
+        const rgb: [number, number, number] = [r, g, b];
+        obj = colorTracker.lookup(rgb);
 
       }
 
@@ -204,17 +233,17 @@ export class HoverManager {
   /**
    * Compare two hover objects for equality
    */
-  private isSameHoverObject(obj1: any, obj2: any): boolean {
+  private isSameHoverObject(obj1: { type: 'Node' | 'Link'; d: V2Node | V2Link } | null, obj2: { type: 'Node' | 'Link'; d: V2Node | V2Link } | null): boolean {
     if (obj1 === obj2) return true;
     if (!obj1 || !obj2) return false;
-    if (obj1.type !== obj2.type) return false;
+    if (obj1.d.entityType !== obj2.d.entityType) return false;
 
     // Compare by ID for nodes, or by source/target for links
-    if (obj1.type === 'Node') {
-      return (obj1.d as any)?.id === (obj2.d as any)?.id;
-    } else if (obj1.type === 'Link') {
-      const link1 = obj1.d as any;
-      const link2 = obj2.d as any;
+    if (obj1.d.entityType === 'Node') {
+      return (obj1.d as V2Node)?.id === (obj2.d as V2Node)?.id;
+    } else if (obj1.d.entityType === 'Link') {
+      const link1 = obj1.d as V2Link;
+      const link2 = obj2.d as V2Link;
       const source1 = typeof link1?.source === 'string' ? link1.source : link1?.source?.id;
       const target1 = typeof link1?.target === 'string' ? link1.target : link1?.target?.id;
       const source2 = typeof link2?.source === 'string' ? link2.source : link2?.source?.id;
@@ -241,8 +270,8 @@ export class HoverManager {
 
       if (!isSameObject) {
         const prevObj = this.hoverState.currentHovered;
-        const prevObjType = prevObj ? prevObj.type : null;
-        const objType = obj ? obj.type : null;
+        const prevObjType = prevObj ? prevObj.d.entityType : null;
+        const objType = obj ? obj.d.entityType : null;
 
         // Update state before emitting events
         this.hoverState.previousHovered = prevObj;
@@ -253,8 +282,9 @@ export class HoverManager {
 
         // Hover out event (force-graph lines 625-629)
         if (prevObjType && prevObjType !== objType && prevObj) {
-          this.emit(`${prevObjType.toLowerCase()}Unhover`, {
-            type: `${prevObjType.toLowerCase()}Unhover` as any,
+          const eventType = prevObjType === 'Node' ? 'nodeUnhover' : 'linkUnhover';
+          this.emit(eventType as 'nodeUnhover' | 'linkUnhover', {
+            type: eventType,
             current: null,
             previous: prevObj.d
           });
@@ -262,8 +292,9 @@ export class HoverManager {
 
         // Hover in event (force-graph lines 630-634)
         if (objType && obj) {
-          this.emit(`${objType.toLowerCase()}Hover`, {
-            type: `${objType.toLowerCase()}Hover` as any,
+          const eventType = objType === 'Node' ? 'nodeHover' : 'linkHover';
+          this.emit(eventType as 'nodeHover' | 'linkHover', {
+            type: eventType,
             current: obj.d,
             previous: prevObjType === objType && prevObj ? prevObj.d : null
           });
@@ -271,7 +302,9 @@ export class HoverManager {
       }
 
       // Refresh shadow canvas on redraw (force-graph line 647)
-      this.refreshShadowCanvas && this.refreshShadowCanvas();
+      if (this.refreshShadowCanvas) {
+        this.refreshShadowCanvas();
+      }
 
     } catch (error) {
       ErrorHandler.logError(error as Error);
@@ -349,7 +382,9 @@ export class HoverManager {
    * Flush shadow canvas immediately (force-graph pattern)
    */
   flushShadow(): void {
-    this.flushShadowCanvas && this.flushShadowCanvas();
+    if (this.flushShadowCanvas) {
+      this.flushShadowCanvas();
+    }
   }
 
   /**
@@ -380,6 +415,8 @@ export class HoverManager {
       this.container = undefined;
       this.refreshShadowCanvas = undefined;
       this.flushShadowCanvas = undefined;
+      this.hasValidPointerPosition = false;
+      this.containerWarningLogged = false;
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }

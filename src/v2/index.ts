@@ -5,11 +5,14 @@
  * Features comprehensive error handling, clean architecture, and full V1 API compatibility.
  */
 
+// Import CSS for V2 components (needed for demos and direct V2 usage)
+import './styles/main.css';
+
 // Export types
 export * from './types';
 
-// Export utilities
-export * from './utils';
+// Export utilities (excluding duplicated style exports)
+export { ErrorHandler, ValidationError } from './utils';
 
 // Export core modules
 export * from './core';
@@ -24,4 +27,4 @@ export * from './rendering';
 export { V2Graph, createV2Graph } from './v2-graph';
 
 // Export V1-compatible API
-export { createGraph } from './v1-wrapper';
+// export { createGraph } from './v1-wrapper';

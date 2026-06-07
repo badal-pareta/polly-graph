@@ -15,7 +15,7 @@ export const CanvasUtils = {
     try {
       const pxRatio = window.devicePixelRatio || 1;
       ctx.setTransform(pxRatio, 0, 0, pxRatio, 0, 0);
-    } catch (error) {
+    } catch {
       throw new RenderError('Failed to reset canvas transform', {
         devicePixelRatio: window.devicePixelRatio
       });

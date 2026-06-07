@@ -2,11 +2,15 @@
  * V2 Canvas Graph - Error Handling
  */
 
+import { V2Link, V2Node } from '../types';
+
+type ErrorContext = Record<string, unknown>;
+
 export class V2GraphError extends Error {
   constructor(
     message: string,
     public code: string,
-    public context?: Record<string, any>
+    public context?: ErrorContext
   ) {
     super(message);
     this.name = 'V2GraphError';
@@ -14,28 +18,28 @@ export class V2GraphError extends Error {
 }
 
 export class ValidationError extends V2GraphError {
-  constructor(message: string, context?: Record<string, any>) {
+  constructor(message: string, context?: ErrorContext) {
     super(message, 'VALIDATION_ERROR', context);
     this.name = 'ValidationError';
   }
 }
 
 export class RenderError extends V2GraphError {
-  constructor(message: string, context?: Record<string, any>) {
+  constructor(message: string, context?: ErrorContext) {
     super(message, 'RENDER_ERROR', context);
     this.name = 'RenderError';
   }
 }
 
 export class InteractionError extends V2GraphError {
-  constructor(message: string, context?: Record<string, any>) {
+  constructor(message: string, context?: ErrorContext) {
     super(message, 'INTERACTION_ERROR', context);
     this.name = 'InteractionError';
   }
 }
 
 export class ConfigurationError extends V2GraphError {
-  constructor(message: string, context?: Record<string, any>) {
+  constructor(message: string, context?: ErrorContext) {
     super(message, 'CONFIGURATION_ERROR', context);
     this.name = 'ConfigurationError';
   }
@@ -69,7 +73,7 @@ export const ErrorHandler = {
   /**
    * Validates nodes array
    */
-  validateNodes(nodes: unknown): any[] {
+  validateNodes(nodes: unknown): V2Node[] {
     if (!Array.isArray(nodes)) {
       throw new ValidationError('Nodes must be an array', {
         received: typeof nodes
@@ -98,7 +102,7 @@ export const ErrorHandler = {
   /**
    * Validates links array
    */
-  validateLinks(links: unknown): any[] {
+  validateLinks(links: unknown): V2Link[] {
     if (!Array.isArray(links)) {
       throw new ValidationError('Links must be an array', {
         received: typeof links
@@ -178,7 +182,7 @@ export const ErrorHandler = {
   /**
    * Logs errors with context in development
    */
-  logError(error: Error, context?: Record<string, any>): void {
+  logError(error: Error, context?: ErrorContext): void {
     if (process.env.NODE_ENV !== 'production') {
       console.group('🚫 V2 Canvas Graph Error');
       console.error('Error:', error.message);

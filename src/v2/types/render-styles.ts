@@ -5,6 +5,16 @@
  */
 
 import { PrimaryColor, StandardColor } from '../../shared/constants/colors';
+import { LinkArrowStyle } from '../../shared/contracts/graph.types';
+
+export interface NodeLabelRenderStyle {
+  enabled: boolean;
+  font: string;
+  textColor: string;
+  textAlign: string;
+  textBaseline: string;
+  offsetY: number;
+}
 
 export interface NodeRenderStyle {
   fill: string;
@@ -12,27 +22,30 @@ export interface NodeRenderStyle {
   strokeWidth: number;
   radius: number;
   opacity: number;
+  textColor?: string; // For Angular compatibility
+  label?: NodeLabelRenderStyle;
 }
 
+// Use shared interface but keep V2-specific properties (optional for partial usage)
 export interface LinkLabelRenderStyle {
-  enabled: boolean;
-  visibility: 'always' | 'hover' | 'selection';
-  text: string;
-  font: string;
-  textColor: string;
-  backgroundColor: string;
-  borderColor: string;
-  borderWidth: number;
-  borderRadius: number;
-  paddingX: number;
-  paddingY: number;
+  enabled?: boolean;
+  visibility?: 'always' | 'hover' | 'selection';
+  text?: string;
+  font?: string;
+  textColor?: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  paddingX?: number;
+  paddingY?: number;
 }
 
 export interface LinkRenderStyle {
   stroke: string;
   strokeWidth: number;
   opacity: number;
-  arrow?: ArrowRenderStyle;
+  arrow?: LinkArrowStyle;
   label?: LinkLabelRenderStyle;
 }
 
@@ -44,12 +57,8 @@ export interface LinkRenderStyle {
 //   readonly opacity: number;
 // }
 
-export interface ArrowRenderStyle {
-  readonly enabled: boolean;
-  readonly length: number;
-  readonly width: number;
-  readonly fill: string;
-}
+// Use shared interface for consistency
+export type ArrowRenderStyle = LinkArrowStyle;
 
 // export interface LinkRenderStyle {
 //   readonly stroke: string;
@@ -77,13 +86,6 @@ export interface CanvasRenderConfig {
 }
 
 // Default style constants (inspired by V1 but optimized for canvas)
-export const DEFAULT_NODE_STYLE: NodeRenderStyle = {
-  radius: 5,
-  fill: '#6c5ce7',
-  stroke: '#000000',
-  strokeWidth: 1.5,
-  opacity: 1.0
-};
 
 export const DEFAULT_LINK_LABEL_STYLE: LinkLabelRenderStyle = {
   enabled: true,
@@ -105,8 +107,7 @@ export const DEFAULT_LINK_STYLE: LinkRenderStyle = {
   opacity: 0.9,
   arrow: {
     enabled: true,
-    length: 4,
-    width: 3,
+    size: 4,
     fill: '#94a3b8'
   },
   label: DEFAULT_LINK_LABEL_STYLE
@@ -125,22 +126,21 @@ export const DEFAULT_HOVER_STYLES: HoverStyles = {
     opacity: 1.0,
     arrow: {
       enabled: true,
-      length: 4,
-      width: 3,
+      size: 4,
       fill: '#ff6b6b'
     }
   }
 };
 
 // Type guards for style validation
-export function isValidNodeStyle(style: any): style is Partial<NodeRenderStyle> {
+export function isValidNodeStyle(style: unknown): style is Partial<NodeRenderStyle> {
   if (!style || typeof style !== 'object') return false;
 
-  const validKeys = ['radius', 'fill', 'stroke', 'strokeWidth', 'opacity'];
+  const validKeys = ['radius', 'fill', 'stroke', 'strokeWidth', 'opacity', 'label'];
   return Object.keys(style).every(key => validKeys.includes(key));
 }
 
-export function isValidLinkStyle(style: any): style is Partial<LinkRenderStyle> {
+export function isValidLinkStyle(style: unknown): style is Partial<LinkRenderStyle> {
   if (!style || typeof style !== 'object') return false;
 
   const validKeys = ['stroke', 'strokeWidth', 'opacity', 'arrow', 'label'];
@@ -156,7 +156,15 @@ export function mergeNodeStyle(base: NodeRenderStyle, override?: Partial<NodeRen
     fill: override.fill ?? base.fill,
     stroke: override.stroke ?? base.stroke,
     strokeWidth: override.strokeWidth ?? base.strokeWidth,
-    opacity: override.opacity ?? base.opacity
+    opacity: override.opacity ?? base.opacity,
+    label: base.label ? {
+      enabled: override.label?.enabled ?? base.label.enabled,
+      font: override.label?.font ?? base.label.font,
+      textColor: override.label?.textColor ?? base.label.textColor,
+      textAlign: override.label?.textAlign ?? base.label.textAlign,
+      textBaseline: override.label?.textBaseline ?? base.label.textBaseline,
+      offsetY: override.label?.offsetY ?? base.label.offsetY
+    } : override.label
   };
 }
 
@@ -169,8 +177,7 @@ export function mergeLinkStyle(base: LinkRenderStyle, override?: Partial<LinkRen
     opacity: override.opacity ?? base.opacity,
     arrow: base.arrow ? {
       enabled: override.arrow?.enabled ?? base.arrow.enabled,
-      length: override.arrow?.length ?? base.arrow.length,
-      width: override.arrow?.width ?? base.arrow.width,
+      size: override.arrow?.size ?? base.arrow.size,
       fill: override.arrow?.fill ?? override.stroke ?? base.arrow.fill
     } : override.arrow,
     label: base.label ? {

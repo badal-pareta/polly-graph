@@ -43,25 +43,8 @@ export interface GraphInteractionConfig {
   readonly selection?: SelectionInteractionConfig;
 }
 
-// Controls configuration
-export type GraphControlsPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-export type GraphControlsOrientation = 'horizontal' | 'vertical' | 'auto';
-
-export interface GraphControlsConfig {
-  readonly enabled?: boolean;
-  readonly position?: GraphControlsPosition;
-  readonly orientation?: GraphControlsOrientation;
-  readonly show?: {
-    readonly zoomIn?: boolean;
-    readonly zoomOut?: boolean;
-    readonly fit?: boolean;
-    readonly reset?: boolean;
-  };
-  readonly offset?: {
-    readonly x: number;
-    readonly y: number;
-  };
-}
+// Import controls configuration from shared
+import { GraphControlsConfig } from './graph-controls.interface';
 
 // Legend configuration
 export type LegendPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -100,9 +83,9 @@ export interface BaseGraphConfig {
 }
 
 // V1-specific graph configuration (extends base)
-export interface GraphConfig extends BaseGraphConfig {
-  // V1 can add SVG-specific options here if needed
-}
+// export interface GraphConfig extends BaseGraphConfig {
+//   // V1 can add SVG-specific options here if needed
+// }
 
 // Controllers interface
 export interface ControlsController {

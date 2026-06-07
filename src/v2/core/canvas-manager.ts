@@ -5,7 +5,7 @@
  */
 
 import ColorTracker from 'canvas-color-tracker';
-import { CanvasUtils, ErrorHandler, ValidationError } from '../utils';
+import { CanvasUtils, ErrorHandler, ValidationError, observeResize, calculateCanvasDimensions } from '../utils';
 import { V2Config } from '../types';
 
 export interface CanvasState {
@@ -20,6 +20,8 @@ export interface CanvasState {
 
 export class CanvasManager {
   private state?: CanvasState;
+  private resizeCleanup?: () => void;
+  private resizeCallback?: (width: number, height: number) => void;
 
   /**
    * Initialize canvas system
@@ -130,6 +132,79 @@ export class CanvasManager {
   }
 
   /**
+   * Setup resize observer for responsive canvas
+   * Following force-graph patterns for container-driven resizing
+   */
+  setupResize(container: HTMLElement, onResize?: (width: number, height: number) => void): void {
+    this.resizeCallback = onResize;
+
+    try {
+      this.resizeCleanup = observeResize(container, (width, height) => {
+        this.resizeCanvas(width, height);
+
+        // Call external resize callback if provided
+        if (this.resizeCallback) {
+          this.resizeCallback(width, height);
+        }
+      });
+    } catch (error) {
+      ErrorHandler.logError(error as Error, {
+        containerTag: container?.tagName
+      });
+    }
+  }
+
+  /**
+   * Resize canvas to new dimensions
+   * Following force-graph's adjustCanvasSize pattern with device pixel ratio scaling
+   */
+  resizeCanvas(width: number, height: number): void {
+    if (!this.state) return;
+
+    try {
+      const dimensions = calculateCanvasDimensions(width, height);
+      const { canvas, shadowCanvas } = this.state;
+
+      // Update both main and shadow canvas following force-graph pattern
+      [canvas, shadowCanvas].forEach(canvasEl => {
+        // Element size (CSS pixels)
+        canvasEl.style.width = `${dimensions.styleWidth}px`;
+        canvasEl.style.height = `${dimensions.styleHeight}px`;
+
+        // Memory size (scaled for device pixel ratio to avoid blurriness)
+        canvasEl.width = dimensions.canvasWidth;
+        canvasEl.height = dimensions.canvasHeight;
+
+        // Scale context to handle device pixel ratio (force-graph pattern)
+        const ctx = canvasEl.getContext('2d');
+        if (ctx && dimensions.devicePixelRatio !== 1) {
+          ctx.scale(dimensions.devicePixelRatio, dimensions.devicePixelRatio);
+        }
+      });
+
+      // Update internal state
+      this.state.width = width;
+      this.state.height = height;
+
+    } catch (error) {
+      ErrorHandler.logError(error as Error, { width, height });
+    }
+  }
+
+  /**
+   * Get current canvas dimensions
+   */
+  getDimensions(): { width: number; height: number } {
+    if (!this.state) {
+      return { width: 0, height: 0 };
+    }
+    return {
+      width: this.state.width,
+      height: this.state.height
+    };
+  }
+
+  /**
    * Destroy canvas system
    */
   destroy(): void {
@@ -137,6 +212,12 @@ export class CanvasManager {
 
     try {
       const { canvas, colorTracker } = this.state;
+
+      // Cleanup resize observer
+      if (this.resizeCleanup) {
+        this.resizeCleanup();
+        this.resizeCleanup = undefined;
+      }
 
       // Remove canvas from DOM
       if (canvas.parentNode) {
@@ -147,6 +228,7 @@ export class CanvasManager {
       colorTracker.reset();
 
       this.state = undefined;
+      this.resizeCallback = undefined;
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }
@@ -157,7 +239,7 @@ export class CanvasManager {
    */
   getStats(): {
     dimensions: { width: number; height: number };
-    colorTracker: any;
+    colorTracker: ColorTracker;
     devicePixelRatio: number;
   } {
     if (!this.state) {

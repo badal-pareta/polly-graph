@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polly Graph V3 Demo - Force-Graph Wrapper</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #1e293b;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        button:active {
+            background: #1d4ed8;
+        }
+
+        #graph-container {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .info-panel {
+            margin-top: 20px;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .info-panel h3 {
+            margin-top: 0;
+            color: #1e293b;
+        }
+
+        .event-log {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .feature-card h4 {
+            margin-top: 0;
+            color: #1e293b;
+        }
+
+        .feature-card ul {
+            color: #64748b;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Polly Graph V3 Demo</h1>
+        <p class="subtitle">Force-Graph wrapper providing V1-compatible API with canvas-based performance</p>
+
+        <div class="controls">
+            <button onclick="graph.zoomIn()">Zoom In</button>
+            <button onclick="graph.zoomOut()">Zoom Out</button>
+            <button onclick="graph.resetView()">Reset View</button>
+            <button onclick="graph.fitView()">Fit View</button>
+            <button onclick="graph.clearSelection()">Clear Selection</button>
+            <button onclick="graph.exportGraph()">Export PNG</button>
+        </div>
+
+        <div id="graph-container"></div>
+
+        <div class="info-panel">
+            <h3>Event Log</h3>
+            <div id="event-log" class="event-log">
+                Click nodes and links to see events here...
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <h4>V3 Features</h4>
+                <ul>
+                    <li>Canvas-based rendering for better performance</li>
+                    <li>V1-compatible API (same interface)</li>
+                    <li>Force-Graph library underneath</li>
+                    <li>Native zoom, pan, and drag interactions</li>
+                </ul>
+            </div>
+            <div class="feature-card">
+                <h4>Interactions</h4>
+                <ul>
+                    <li>Click nodes/links to select</li>
+                    <li>Drag nodes to reposition</li>
+                    <li>Mouse wheel to zoom</li>
+                    <li>Click and drag to pan</li>
+                </ul>
+            </div>
+            <div class="feature-card">
+                <h4>Performance</h4>
+                <ul>
+                    <li>Hardware-accelerated canvas rendering</li>
+                    <li>Efficient force simulation</li>
+                    <li>Smooth animations and interactions</li>
+                    <li>Scales to larger datasets</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createV3Graph } from '../dist/index.js';
+
+        // Sample graph data with more nodes to show physics
+        const sampleData = {
+            nodes: [
+                { id: 'A', type: 'entity', label: 'Node A', style: { fill: '#ff6b6b', radius: 8 } },
+                { id: 'B', type: 'entity', label: 'Node B', style: { fill: '#4ecdc4', radius: 10 } },
+                { id: 'C', type: 'entity', label: 'Node C', style: { fill: '#45b7d1', radius: 6 } },
+                { id: 'D', type: 'entity', label: 'Node D', style: { fill: '#96ceb4', radius: 8 } },
+                { id: 'E', type: 'entity', label: 'Node E', style: { fill: '#ffeaa7', radius: 7 } },
+                { id: 'F', type: 'entity', label: 'Node F', style: { fill: '#dfe6e9', radius: 9 } },
+                { id: 'G', type: 'entity', label: 'Node G', style: { fill: '#fab1a0', radius: 6 } },
+                { id: 'H', type: 'entity', label: 'Node H', style: { fill: '#a29bfe', radius: 8 } }
+            ],
+            links: [
+                { source: 'A', target: 'B', style: { stroke: '#999', strokeWidth: 2 } },
+                { source: 'B', target: 'C', style: { stroke: '#999', strokeWidth: 1 } },
+                { source: 'C', target: 'D', style: { stroke: '#999', strokeWidth: 2 } },
+                { source: 'D', target: 'E', style: { stroke: '#999', strokeWidth: 1 } },
+                { source: 'E', target: 'F', style: { stroke: '#999', strokeWidth: 2 } },
+                { source: 'F', target: 'A', style: { stroke: '#ff6b6b', strokeWidth: 3 } },
+                { source: 'A', target: 'G', style: { stroke: '#999', strokeWidth: 1 } },
+                { source: 'B', target: 'H', style: { stroke: '#999', strokeWidth: 1 } },
+                { source: 'G', target: 'H', style: { stroke: '#999', strokeWidth: 2 } },
+                { source: 'C', target: 'F', style: { stroke: '#45b7d1', strokeWidth: 2 } },
+                { source: 'D', target: 'G', style: { stroke: '#999', strokeWidth: 1 } }
+            ]
+        };
+
+        // Event logging
+        const eventLog = document.getElementById('event-log');
+        function logEvent(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            eventLog.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        // Create graph
+        const graph = createV3Graph({
+            container: document.getElementById('graph-container'),
+            nodes: sampleData.nodes,
+            links: sampleData.links,
+            interaction: {
+                selection: {
+                    enabled: true,
+                    multiSelect: false
+                },
+                drag: {
+                    enabled: true
+                }
+            }
+        });
+
+        // Set up event listeners
+        graph.on('nodeSelect', (node, element) => {
+            logEvent(`Node selected: ${node.label || node.id} (${node.type})`);
+        });
+
+        graph.on('nodeDeselect', (node, element) => {
+            logEvent(`Node deselected: ${node.label || node.id} (${node.type})`);
+        });
+
+        graph.on('linkSelect', (link, element) => {
+            logEvent(`Link selected: ${link.label || `${link.source} -> ${link.target}`}`);
+        });
+
+        graph.on('linkDeselect', (link, element) => {
+            logEvent(`Link deselected: ${link.label || `${link.source} -> ${link.target}`}`);
+        });
+
+        // Render the graph
+        graph.render();
+
+        // Make graph available globally for button controls
+        window.graph = graph;
+
+        logEvent('V3 Graph initialized with Force-Graph wrapper');
+    </script>
+</body>
+</html>

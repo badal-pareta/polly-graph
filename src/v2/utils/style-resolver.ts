@@ -4,7 +4,7 @@
  * V1-compatible style resolution with hover and selection states
  */
 
-import { V2Node, V2Link, NodeRenderStyle, LinkRenderStyle, LinkLabelRenderStyle } from '../types';
+import { V2Node, V2Link, NodeRenderStyle, LinkRenderStyle, LinkLabelRenderStyle, InteractionConfig } from '../types';
 import { PrimaryColor, NeutralColor, StandardColor } from '../../shared/constants';
 
 // KG co-scientist graph compatible default styles
@@ -42,8 +42,7 @@ export const DEFAULT_LINK_STYLE: LinkRenderStyle = {
   opacity: 0.8,
   arrow: {
     enabled: true,
-    length: 8, // Slightly larger for better visibility
-    width: 6,
+    size: 8, // Slightly larger for better visibility
     fill: NeutralColor.PURPLE
   },
   label: DEFAULT_LINK_LABEL_STYLE
@@ -54,29 +53,28 @@ export const DEFAULT_LINK_INTERACTION_STYLE: Partial<LinkRenderStyle> = {
   opacity: 1.0, // KG component hover opacity
   arrow: {
     enabled: true,
-    length: 8,
-    width: 6,
+    size: 8,
     fill: NeutralColor.PURPLE // Match link color
   }
 };
 
 // V1-compatible interaction configuration
-export interface HoverInteractionConfig {
-  readonly enabled?: boolean;
-  readonly nodeStyle?: Partial<NodeRenderStyle>;
-  readonly linkStyle?: Partial<LinkRenderStyle>;
-}
+// export interface HoverInteractionConfig {
+//   readonly enabled?: boolean;
+//   readonly nodeStyle?: Partial<NodeRenderStyle>;
+//   readonly linkStyle?: Partial<LinkRenderStyle>;
+// }
 
-export interface SelectionInteractionConfig {
-  readonly enabled?: boolean;
-  readonly nodeStyle?: Partial<NodeRenderStyle>;
-  readonly linkStyle?: Partial<LinkRenderStyle>;
-}
+// export interface SelectionInteractionConfig {
+//   readonly enabled?: boolean;
+//   readonly nodeStyle?: Partial<NodeRenderStyle>;
+//   readonly linkStyle?: Partial<LinkRenderStyle>;
+// }
 
-export interface InteractionConfig {
-  readonly hover?: HoverInteractionConfig;
-  readonly selection?: SelectionInteractionConfig;
-}
+// export interface InteractionConfig {
+//   readonly hover?: HoverInteractionConfig;
+//   readonly selection?: SelectionInteractionConfig;
+// }
 
 // Enhanced node/link types with style support
 export interface V2NodeWithStyle extends V2Node {
@@ -87,22 +85,76 @@ export interface V2LinkWithStyle extends V2Link {
   style?: Partial<LinkRenderStyle>;
 }
 
+// interface LinkStyleCacheKey {
+//   linkId: string;
+//   hasCustomStyle: boolean;
+//   isHovered: boolean;
+//   isSelected: boolean;
+//   interactionConfigHash: string;
+// }
+
 export class StyleResolver {
   private interactionConfig?: InteractionConfig;
 
+  // Style caches (Step 4 optimization)
+  private nodeStyleCache = new Map<string, NodeRenderStyle>();
+  private linkStyleCache = new Map<string, LinkRenderStyle>();
+  private interactionConfigHash = '';
+
   constructor(interactionConfig?: InteractionConfig) {
     this.interactionConfig = interactionConfig;
+    this.updateInteractionConfigHash();
   }
 
   /**
-   * Resolve node style using V1-compatible approach
+   * Generate interaction config hash for cache invalidation (Step 4 optimization)
+   */
+  private updateInteractionConfigHash(): void {
+    this.interactionConfigHash = this.interactionConfig
+      ? JSON.stringify(this.interactionConfig)
+      : 'default';
+  }
+
+  /**
+   * Generate cache key for node styles (Step 4 optimization)
+   */
+  private createNodeCacheKey(node: V2NodeWithStyle, isHovered: boolean, isSelected: boolean): string {
+    return `${node.id}_${!!node.style}_${isHovered}_${isSelected}_${this.interactionConfigHash}`;
+  }
+
+  /**
+   * Generate cache key for link styles (Step 4 optimization)
+   */
+  private createLinkCacheKey(link: V2LinkWithStyle, isHovered: boolean, isSelected: boolean): string {
+    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+    const linkId = `${sourceId}->${targetId}`;
+    return `${linkId}_${!!link.style}_${isHovered}_${isSelected}_${this.interactionConfigHash}`;
+  }
+
+  /**
+   * Resolve node style using V1-compatible approach with caching (Step 4 optimization)
    */
   resolveNodeStyle(params: {
     node: V2NodeWithStyle;
     isHovered?: boolean;
     isSelected?: boolean;
   }): NodeRenderStyle {
-    const { node, isHovered, isSelected } = params;
+    const { node, isHovered = false, isSelected = false } = params;
+
+    // Check cache first (Step 4 optimization)
+    const cacheKey = this.createNodeCacheKey(node, isHovered, isSelected);
+    const cached = this.nodeStyleCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Fast path: no interaction states, avoid object spreading
+    if (!isHovered && !isSelected) {
+      const result = node.style ? { ...DEFAULT_NODE_STYLE, ...node.style } : DEFAULT_NODE_STYLE;
+      this.nodeStyleCache.set(cacheKey, result);
+      return result;
+    }
 
     // Start with node's individual style or defaults
     let result: NodeRenderStyle = {
@@ -125,40 +177,101 @@ export class StyleResolver {
       result = { ...result, ...interactionStyle };
     }
 
+    // Cache the result before returning (Step 4 optimization)
+    this.nodeStyleCache.set(cacheKey, result);
     return result;
   }
 
   /**
-   * Resolve link style using V1-compatible approach
+   * Resolve link style using V1-compatible approach with caching (Step 4 optimization)
    */
   resolveLinkStyle(params: {
     link: V2LinkWithStyle;
     isHovered?: boolean;
     isSelected?: boolean;
   }): LinkRenderStyle {
-    const { link, isHovered, isSelected } = params;
+    const { link, isHovered = false, isSelected = false } = params;
+
+    // Check cache first (Step 4 optimization)
+    const cacheKey = this.createLinkCacheKey(link, isHovered, isSelected);
+    const cached = this.linkStyleCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Fast path: no interaction states, avoid object spreading
+    if (!isHovered && !isSelected) {
+      const result = link.style ? {
+        ...DEFAULT_LINK_STYLE,
+        ...link.style,
+        // Deep merge label styles to preserve default styling
+        label: link.style.label ? {
+          ...DEFAULT_LINK_STYLE.label,
+          ...link.style.label
+        } : DEFAULT_LINK_STYLE.label
+      } : DEFAULT_LINK_STYLE;
+
+      // Auto-sync arrow fill with link color (even for normal state)
+      if (result.arrow?.enabled && result.stroke) {
+        const hasExplicitArrowFill = link.style?.arrow?.fill !== undefined;
+        if (!hasExplicitArrowFill) {
+          result.arrow = {
+            ...result.arrow,
+            fill: result.stroke
+          };
+        }
+      }
+
+      this.linkStyleCache.set(cacheKey, result);
+      return result;
+    }
 
     // Start with link's individual style or defaults
     let result: LinkRenderStyle = {
       ...DEFAULT_LINK_STYLE,
-      ...link.style
+      ...link.style,
+      // Deep merge label styles to preserve default styling
+      label: link.style?.label ? {
+        ...DEFAULT_LINK_STYLE.label,
+        ...link.style.label
+      } : DEFAULT_LINK_STYLE.label
     };
 
     // Apply interaction styles (selection takes precedence over hover)
     if (isSelected) {
       const interactionStyle = this.mergeLinkStyleSmart(
         DEFAULT_LINK_INTERACTION_STYLE,
-        this.interactionConfig?.selection?.linkStyle
+        this.interactionConfig?.selection?.linkStyle as Partial<LinkRenderStyle>
       );
       result = { ...result, ...interactionStyle };
     } else if (isHovered) {
       const interactionStyle = this.mergeLinkStyleSmart(
         DEFAULT_LINK_INTERACTION_STYLE,
-        this.interactionConfig?.hover?.linkStyle
+        this.interactionConfig?.hover?.linkStyle as Partial<LinkRenderStyle>
       );
       result = { ...result, ...interactionStyle };
     }
 
+    // Auto-sync arrow fill with link color (only if arrow fill not explicitly overridden)
+    if (result.arrow?.enabled && result.stroke) {
+      // Check if arrow fill was explicitly provided (not default)
+      const hasExplicitArrowFill = (
+        (link.style?.arrow?.fill !== undefined) ||
+        (isSelected && this.interactionConfig?.selection?.linkStyle?.arrow?.fill !== undefined) ||
+        (isHovered && this.interactionConfig?.hover?.linkStyle?.arrow?.fill !== undefined)
+      );
+
+      // Only auto-sync if no explicit arrow fill override
+      if (!hasExplicitArrowFill) {
+        result.arrow = {
+          ...result.arrow,
+          fill: result.stroke
+        };
+      }
+    }
+
+    // Cache the result before returning (Step 4 optimization)
+    this.linkStyleCache.set(cacheKey, result);
     return result;
   }
 
@@ -171,7 +284,7 @@ export class StyleResolver {
   ): Partial<NodeRenderStyle> {
     if (!override) return base;
 
-    const result: any = { ...override };
+    const result: Partial<NodeRenderStyle> = { ...override };
 
     // Smart defaults: only apply base stroke if override specifies strokeWidth but no stroke
     if (override.strokeWidth !== undefined && override.stroke === undefined && base.stroke !== undefined) {
@@ -182,7 +295,7 @@ export class StyleResolver {
     const baseKeys = Object.keys(base) as Array<keyof NodeRenderStyle>;
     baseKeys.forEach(key => {
       if (key !== 'stroke' && override[key] === undefined && base[key] !== undefined) {
-        result[key] = base[key];
+        (result as Record<string, unknown>)[key] = base[key];
       }
     });
 
@@ -198,7 +311,7 @@ export class StyleResolver {
   ): Partial<LinkRenderStyle> {
     if (!override) return base;
 
-    const result: any = { ...override };
+    const result: Partial<LinkRenderStyle> = { ...override };
 
     // Apply base properties if not specified in override
     const baseKeys = Object.keys(base) as Array<keyof LinkRenderStyle>;
@@ -207,7 +320,7 @@ export class StyleResolver {
         if (key === 'arrow' && base.arrow) {
           result.arrow = { ...base.arrow, ...override.arrow };
         } else {
-          result[key] = base[key];
+          (result as Record<string, unknown>)[key] = base[key];
         }
       }
     });
@@ -216,10 +329,34 @@ export class StyleResolver {
   }
 
   /**
-   * Update interaction configuration
+   * Update interaction configuration and clear cache (Step 4 optimization)
    */
   updateInteractionConfig(config: InteractionConfig): void {
     this.interactionConfig = config;
+    this.updateInteractionConfigHash();
+    // Clear caches when interaction config changes
+    this.clearStyleCache();
+  }
+
+  /**
+   * Clear style caches (Step 4 optimization)
+   */
+  clearStyleCache(): void {
+    this.nodeStyleCache.clear();
+    this.linkStyleCache.clear();
+  }
+
+  /**
+   * Get cache statistics for monitoring (Step 4 optimization)
+   */
+  getCacheStats(): {
+    nodeCache: { size: number; hitRatio?: number };
+    linkCache: { size: number; hitRatio?: number };
+  } {
+    return {
+      nodeCache: { size: this.nodeStyleCache.size },
+      linkCache: { size: this.linkStyleCache.size }
+    };
   }
 
   /**

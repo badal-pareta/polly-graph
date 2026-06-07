@@ -4,14 +4,15 @@
  * Clean implementation following force-graph's exact architecture
  */
 
-import { zoomTransform as d3ZoomTransform } from 'd3-zoom';
+import { zoomTransform as d3ZoomTransform, ZoomTransform } from 'd3-zoom';
 import { CanvasState } from '../core';
-import { V2Node, V2Link, NodeRenderStyle, LinkRenderStyle, InteractionConfig } from '../types';
-import { ErrorHandler, ValidationError, CanvasUtils, RenderError, StyleResolver, createStyleResolver } from '../utils';
+import { V2Node, V2Link, LinkRenderStyle, InteractionConfig } from '../types';
+import { ErrorHandler, ValidationError, CanvasUtils, RenderError, StyleResolver, createStyleResolver, ZIndexManager } from '../utils';
 import { HoverManager, SelectionManager } from '../interactions';
 import { NodesRenderer } from './nodes-renderer';
 import { NodeLabelsRenderer } from './node-labels-renderer';
 import { LinkLabelsRenderer } from './link-labels-renderer';
+import { StatsMetrics } from '../types/generic.types';
 // Rendering style interfaces
 
 
@@ -21,6 +22,30 @@ export class Renderer {
   private hoverManager?: HoverManager;
   private selectionManager?: SelectionManager;
   private styleResolver?: StyleResolver;
+
+  // Performance optimization: O(1) node lookups
+  private nodeMap = new Map<string, V2Node>();
+
+  // Shadow canvas optimization (Step 6 optimization)
+  private shadowCanvasDirty = true;
+  private lastShadowRenderTime = 0;
+  private readonly SHADOW_RENDER_THROTTLE = 32; // ~30 FPS max for shadow canvas
+
+  // Large graph optimization flag
+  private hasLoggedLargeGraphOptimization = false;
+
+  // Performance metrics
+  private performanceMetrics: StatsMetrics = {
+    renderTotal: 0,
+    renderNodes: 0,
+    renderLinks: 0,
+    renderLinkLabels: 0,
+    renderNodeLabels: 0,
+    styleResolution: 0,
+    hoverChecks: 0,
+    canvasCalls: 0,
+    frameCount: 0
+  };
 
   // Force-graph pattern: configurable link hover precision
   private linkHoverPrecision = 4; // Default 4px like force-graph
@@ -43,6 +68,9 @@ export class Renderer {
       // Create style resolver with interaction configuration
       this.styleResolver = createStyleResolver(config.interaction);
 
+      // Build node index for O(1) lookups (performance optimization)
+      this.buildNodeIndex();
+
     } catch (error) {
       ErrorHandler.logError(error as Error, {
         nodeCount: config.nodes.length,
@@ -54,22 +82,34 @@ export class Renderer {
 
 
   /**
-   * Main render method
+   * Main render method with performance metrics (Instrumented)
    */
   render(): void {
     if (!this.config || !this.canvasState) {
       throw new RenderError('Renderer not initialized');
     }
 
+    const startTime = performance.now();
+    this.performanceMetrics.frameCount++;
+
     try {
       const { ctx } = this.canvasState;
 
       // Clear and render main canvas
       this.clearCanvas(ctx);
-      this.renderLinks(ctx);
-      this.renderLinkLabels(ctx);
-      this.renderNodes(ctx);
-      this.renderNodeLabels(ctx);
+
+      // Render with z-index management and performance metrics
+      this.renderWithLayersAndMetrics(ctx);
+
+      // Mark shadow canvas for update (Step 6 optimization)
+      this.markShadowCanvasDirty();
+
+      this.performanceMetrics.renderTotal += performance.now() - startTime;
+
+      // Log metrics every 100 frames
+      if (this.performanceMetrics.frameCount % 100 === 0) {
+        this.logPerformanceMetrics();
+      }
 
     } catch (error) {
       ErrorHandler.logError(error as Error);
@@ -82,7 +122,7 @@ export class Renderer {
   }
 
   /**
-   * Render with transform (called during zoom/pan)
+   * Render with transform (called during zoom/pan) with shadow canvas dirty marking (Step 6 optimization)
    */
   renderWithTransform(): void {
     if (!this.canvasState) return;
@@ -91,26 +131,35 @@ export class Renderer {
       const { canvas, ctx } = this.canvasState;
       const transform = d3ZoomTransform(canvas);
 
+
       // Clear and apply transform to main canvas
       this.clearCanvas(ctx);
       this.applyTransform(transform, ctx);
 
-      // Render to main canvas
-      this.renderLinks(ctx);
-      this.renderLinkLabels(ctx);
-      this.renderNodes(ctx);
-      this.renderNodeLabels(ctx);
+      // Render with z-index management (layered approach)
+      this.renderWithLayers(ctx);
+
+      // Mark shadow canvas for update since transform changed (Step 6 optimization)
+      this.markShadowCanvasDirty();
 
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }
   }
 
+
   /**
-   * Render shadow canvas for hit detection (force-graph pattern)
+   * Render shadow canvas for hit detection with throttling (Step 6 optimization)
    */
   renderShadowCanvas(): void {
     if (!this.canvasState || !this.config) return;
+
+    // Throttle shadow canvas updates (Step 6 optimization)
+    // TEMP DEBUG: Force render shadow canvas for hit detection debugging
+    const now = Date.now();
+    // if (!this.shadowCanvasDirty || (now - this.lastShadowRenderTime) < this.SHADOW_RENDER_THROTTLE) {
+    //   return; // Skip if not dirty or too frequent
+    // }
 
     try {
       const { shadowCtx, canvas } = this.canvasState;
@@ -127,9 +176,29 @@ export class Renderer {
       this.renderShadowLinkLabels(shadowCtx);
       this.renderShadowNodes(shadowCtx);
 
+      // Mark as clean and update timestamp (Step 6 optimization)
+      this.shadowCanvasDirty = false;
+      this.lastShadowRenderTime = now;
+
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }
+  }
+
+  /**
+   * Mark shadow canvas as dirty for next render (Step 6 optimization)
+   */
+  markShadowCanvasDirty(): void {
+    this.shadowCanvasDirty = true;
+  }
+
+  /**
+   * Force shadow canvas render (Step 6 optimization)
+   */
+  forceShadowCanvasRender(): void {
+    this.shadowCanvasDirty = true;
+    this.lastShadowRenderTime = 0;
+    this.renderShadowCanvas();
   }
 
   /**
@@ -142,7 +211,7 @@ export class Renderer {
       const { width, height } = this.canvasState;
       CanvasUtils.resetTransform(ctx);
       ctx.clearRect(0, 0, width, height);
-    } catch (error) {
+    } catch {
       throw new RenderError('Failed to clear canvas');
     }
   }
@@ -150,88 +219,25 @@ export class Renderer {
   /**
    * Apply transform to canvas context
    */
-  private applyTransform(transform: any, ctx: CanvasRenderingContext2D): void {
+  private applyTransform(transform: ZoomTransform, ctx: CanvasRenderingContext2D): void {
     try {
       CanvasUtils.resetTransform(ctx);
       ctx.translate(transform.x, transform.y);
       ctx.scale(transform.k, transform.k);
-    } catch (error) {
+    } catch {
       throw new RenderError('Failed to apply transform');
     }
   }
 
   /**
-   * Render main canvas links
+   * Get unique link ID for tracking (consistent with LinkLabelsRenderer)
    */
-  private renderLinks(ctx: CanvasRenderingContext2D): void {
-    if (!this.config || !this.styleResolver) return;
-
-    try {
-      const { links, nodes } = this.config;
-
-      for (const link of links) {
-        const sourceNode = typeof link.source === 'string'
-          ? nodes.find(n => n.id === link.source)
-          : link.source;
-        const targetNode = typeof link.target === 'string'
-          ? nodes.find(n => n.id === link.target)
-          : link.target;
-
-        if (sourceNode && targetNode && sourceNode.x && sourceNode.y && targetNode.x && targetNode.y) {
-          // Use style resolver to get resolved style with hover and selection state
-          const isHovered = this.isLinkHovered(link);
-          const isSelected = this.isLinkSelected(link);
-          const style = this.styleResolver.resolveLinkStyle({
-            link,
-            isHovered,
-            isSelected
-          });
-          this.renderDirectedLink(ctx, sourceNode, targetNode, style);
-        }
-      }
-    } catch (error) {
-      ErrorHandler.logError(error as Error);
-      throw new RenderError('Failed to render links');
-    }
+  private getLinkId(link: V2Link): string {
+    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+    return `${sourceId}->${targetId}`;
   }
 
-  /**
-   * Render link labels
-   */
-  private renderLinkLabels(ctx: CanvasRenderingContext2D): void {
-    if (!this.config || !this.styleResolver) return;
-
-    try {
-      LinkLabelsRenderer.renderWithVisibility(
-        ctx,
-        this.config.links,
-        (link) => {
-          const style = this.styleResolver!.resolveLinkStyle({
-            link,
-            isHovered: this.isLinkHovered(link),
-            isSelected: this.isLinkSelected(link)
-          });
-          return style.label || null;
-        },
-        (link) => this.getLinkMidpoint(link),
-        (linkId) => {
-          const link = this.config!.links.find(l =>
-            `${typeof l.source === 'string' ? l.source : l.source.id}->${typeof l.target === 'string' ? l.target : l.target.id}` === linkId
-          );
-          return link ? this.isLinkHovered(link) : false;
-        },
-        (linkId) => {
-          const link = this.config!.links.find(l =>
-            `${typeof l.source === 'string' ? l.source : l.source.id}->${typeof l.target === 'string' ? l.target : l.target.id}` === linkId
-          );
-          return link ? this.shouldShowLinkLabelForSelection(link) : false;
-        }
-      );
-    } catch (error) {
-      ErrorHandler.logError(error as Error);
-      throw new RenderError('Failed to render link labels');
-    }
-  }
 
   /**
    * Render main canvas nodes
@@ -242,13 +248,14 @@ export class Renderer {
     try {
       const { nodes } = this.config;
 
-      // Use StyleResolver-based rendering
+      // Use StyleResolver-based rendering with performance metrics
       NodesRenderer.renderWithStyleResolver(
         ctx,
         nodes,
         this.styleResolver,
         (nodeId) => this.isNodeHovered(nodeId),
-        (nodeId) => this.isNodeSelected(nodeId)
+        (nodeId) => this.isNodeSelected(nodeId),
+        this.performanceMetrics
       );
     } catch (error) {
       ErrorHandler.logError(error as Error);
@@ -284,7 +291,7 @@ export class Renderer {
     if (!this.config || !this.styleResolver) return;
 
     try {
-      const { nodes, links } = this.config;
+      const { links } = this.config;
 
       // Get default link style for shadow rendering thickness
       const defaultLinkStyle = this.styleResolver.resolveLinkStyle({
@@ -295,10 +302,10 @@ export class Renderer {
         if (!link.__indexColor) continue; // Skip if no index color assigned
 
         const sourceNode = typeof link.source === 'string'
-          ? nodes.find(n => n.id === link.source)
+          ? this.nodeMap.get(link.source)
           : link.source;
         const targetNode = typeof link.target === 'string'
-          ? nodes.find(n => n.id === link.target)
+          ? this.nodeMap.get(link.target)
           : link.target;
 
         if (sourceNode && targetNode && sourceNode.x && sourceNode.y && targetNode.x && targetNode.y && link.__indexColorRGB) {
@@ -333,37 +340,73 @@ export class Renderer {
     if (!this.config || !this.styleResolver) return;
 
     try {
-      // Get all link label positions that should be visible
+      // Simple performance fix: Cache link state lookups and build link lookup map
+      const linkStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+      const linkIdToLinkMap = new Map<string, V2Link>();
+
+      // Build link lookup map (needed for shadow rendering)
+      for (const link of this.config.links) {
+        const linkId = this.getLinkId(link);
+        linkIdToLinkMap.set(linkId, link); // O(1) link lookup
+      }
+
+      // Get all link label positions that should be visible using cached lookups
       const labelPositions = LinkLabelsRenderer.calculateLabelPositions(
         this.config.links,
         (link) => {
+          const linkId = this.getLinkId(link);
+
+          // Cache the state lookup to avoid repeated expensive calls
+          let linkState = linkStateCache.get(linkId);
+          if (!linkState) {
+            linkState = {
+              isHovered: this.isLinkHovered(link),
+              isSelected: this.isLinkSelected(link)
+            };
+            linkStateCache.set(linkId, linkState);
+          }
+
           const style = this.styleResolver!.resolveLinkStyle({
             link,
-            isHovered: this.isLinkHovered(link),
-            isSelected: this.isLinkSelected(link)
+            isHovered: linkState.isHovered,
+            isSelected: linkState.isSelected
           });
           return style.label || null;
         },
         (link) => this.getLinkMidpoint(link),
         (linkId) => {
-          const link = this.config!.links.find(l =>
-            `${typeof l.source === 'string' ? l.source : l.source.id}->${typeof l.target === 'string' ? l.target : l.target.id}` === linkId
-          );
-          return link ? this.isLinkHovered(link) : false;
+          let linkState = linkStateCache.get(linkId);
+          if (!linkState) {
+            const link = linkIdToLinkMap.get(linkId);
+            if (link) {
+              linkState = {
+                isHovered: this.isLinkHovered(link),
+                isSelected: this.isLinkSelected(link)
+              };
+              linkStateCache.set(linkId, linkState);
+            }
+          }
+          return linkState?.isHovered || false;
         },
         (linkId) => {
-          const link = this.config!.links.find(l =>
-            `${typeof l.source === 'string' ? l.source : l.source.id}->${typeof l.target === 'string' ? l.target : l.target.id}` === linkId
-          );
-          return link ? this.shouldShowLinkLabelForSelection(link) : false;
+          let linkState = linkStateCache.get(linkId);
+          if (!linkState) {
+            const link = linkIdToLinkMap.get(linkId);
+            if (link) {
+              linkState = {
+                isHovered: this.isLinkHovered(link),
+                isSelected: this.isLinkSelected(link)
+              };
+              linkStateCache.set(linkId, linkState);
+            }
+          }
+          return linkState?.isSelected || false;
         }
       );
 
-      // Render shadow rectangles for each visible label using the link's color
+      // Render shadow rectangles for each visible label using the link's color with O(1) lookups
       for (const [linkId, position] of labelPositions) {
-        const link = this.config.links.find(l =>
-          `${typeof l.source === 'string' ? l.source : l.source.id}->${typeof l.target === 'string' ? l.target : l.target.id}` === linkId
-        );
+        const link = linkIdToLinkMap.get(linkId); // O(1) lookup instead of O(n) find
 
         if (link && link.__indexColorRGB) {
           const [r, g, b] = link.__indexColorRGB;
@@ -403,13 +446,114 @@ export class Renderer {
   }
 
   /**
+   * Get currently hovered node ID directly (Critical Performance Fix)
+   */
+  private getCurrentlyHoveredNodeId(): string | null {
+    if (!this.hoverManager) return null;
+
+    const hoverState = this.hoverManager.getHoverState();
+    if (!hoverState.currentHovered || hoverState.currentHovered.d.entityType !== 'Node') {
+      return null;
+    }
+
+    const hoveredNode = hoverState.currentHovered.d as V2Node;
+    return hoveredNode ? hoveredNode.id : null;
+  }
+
+  /**
+   * Get currently selected node ID directly (Critical Performance Fix)
+   */
+  private getCurrentlySelectedNodeId(): string | null {
+    if (!this.selectionManager) return null;
+
+    const selectionState = this.selectionManager.getSelectionState();
+    return selectionState.selectedNode?.id || null;
+  }
+
+  /**
+   * Get currently hovered link (Critical Performance Fix)
+   */
+  private getCurrentlyHoveredLink(): V2Link | null {
+    if (!this.hoverManager) return null;
+
+    const hoverState = this.hoverManager.getHoverState();
+    if (!hoverState.currentHovered || hoverState.currentHovered.d.entityType !== 'Link') {
+      return null;
+    }
+
+    return hoverState.currentHovered.d as V2Link;
+  }
+
+  /**
+   * Get currently selected link (Critical Performance Fix)
+   */
+  private getCurrentlySelectedLink(): V2Link | null {
+    if (!this.selectionManager) return null;
+
+    const selectionState = this.selectionManager.getSelectionState();
+    return selectionState.selectedLink || null;
+  }
+
+  /**
+   * Log performance metrics for analysis
+   */
+  private logPerformanceMetrics(): void {
+    const frames = this.performanceMetrics.frameCount;
+    const nodeCount = this.config?.nodes.length || 0;
+    const linkCount = this.config?.links.length || 0;
+
+    console.log('🔍 PERFORMANCE METRICS (avg per frame over', frames, 'frames):');
+    console.log('📊 Graph size:', nodeCount, 'nodes,', linkCount, 'links');
+    console.log('⏱️  Total render:', (this.performanceMetrics.renderTotal / frames).toFixed(2), 'ms');
+    console.log('🔗 Links render:', (this.performanceMetrics.renderLinks / frames).toFixed(2), 'ms');
+    console.log('🏷️  Link labels:', (this.performanceMetrics.renderLinkLabels / frames).toFixed(2), 'ms');
+    console.log('⭕ Nodes render:', (this.performanceMetrics.renderNodes / frames).toFixed(2), 'ms');
+    console.log('📝 Node labels:', (this.performanceMetrics.renderNodeLabels / frames).toFixed(2), 'ms');
+    console.log('🎨 Style resolution:', (this.performanceMetrics.styleResolution / frames).toFixed(2), 'ms');
+    console.log('👆 Hover checks:', (this.performanceMetrics.hoverChecks / frames).toFixed(2), 'ms');
+    console.log('🖼️  Canvas calls:', (this.performanceMetrics.canvasCalls / frames).toFixed(2), 'ms');
+    console.log('---');
+  }
+
+  /**
+   * Reset performance metrics
+   */
+  resetPerformanceMetrics(): void {
+    this.performanceMetrics = {
+      renderTotal: 0,
+      renderNodes: 0,
+      renderLinks: 0,
+      renderLinkLabels: 0,
+      renderNodeLabels: 0,
+        styleResolution: 0,
+      hoverChecks: 0,
+      canvasCalls: 0,
+      frameCount: 0
+    };
+  }
+
+  /**
+   * Get current performance metrics
+   */
+  getPerformanceMetrics(): StatsMetrics {
+    return { ...this.performanceMetrics };
+  }
+
+  /**
+   * Force log performance metrics immediately (for debugging)
+   */
+  forceLogMetrics(): void {
+    this.logPerformanceMetrics();
+  }
+
+  /**
    * Check if a node is currently hovered
    */
   private isNodeHovered(nodeId: string): boolean {
     if (!this.hoverManager) return false;
 
     const hoverState = this.hoverManager.getHoverState();
-    if (!hoverState.currentHovered || hoverState.currentHovered.type !== 'Node') {
+    if (!hoverState.currentHovered || hoverState.currentHovered.d.entityType !== 'Node') {
       return false;
     }
 
@@ -427,7 +571,7 @@ export class Renderer {
     if (!hoverState.currentHovered) return false;
 
     // Direct link hover
-    if (hoverState.currentHovered.type === 'Link') {
+    if (hoverState.currentHovered.d.entityType === 'Link') {
       const hoveredLink = hoverState.currentHovered.d as V2Link;
       if (!hoveredLink) return false;
 
@@ -440,7 +584,7 @@ export class Renderer {
     }
 
     // Node hover - check if this link is connected to the hovered node
-    if (hoverState.currentHovered.type === 'Node') {
+    if (hoverState.currentHovered.d.entityType === 'Node') {
       const hoveredNode = hoverState.currentHovered.d as V2Node;
       if (!hoveredNode) return false;
 
@@ -523,12 +667,11 @@ export class Renderer {
   private getLinkMidpoint(link: V2Link): { x: number; y: number } | null {
     if (!this.config) return null;
 
-    const { nodes } = this.config;
     const sourceNode = typeof link.source === 'string'
-      ? nodes.find(n => n.id === link.source)
+      ? this.nodeMap.get(link.source)
       : link.source;
     const targetNode = typeof link.target === 'string'
-      ? nodes.find(n => n.id === link.target)
+      ? this.nodeMap.get(link.target)
       : link.target;
 
     if (!sourceNode || !targetNode ||
@@ -586,7 +729,7 @@ export class Renderer {
   private getShortenedSourcePoint(
     source: V2Node,
     target: V2Node,
-    style: LinkRenderStyle
+    _style: LinkRenderStyle
   ): { x: number; y: number } {
     const sourceX = source.x ?? 0;
     const sourceY = source.y ?? 0;
@@ -597,8 +740,12 @@ export class Renderer {
     const dy = targetY - sourceY;
     const distance = Math.sqrt(dx * dx + dy * dy) || 1;
 
-    // Get source node style using style resolver
-    const sourceNodeStyle = this.styleResolver!.resolveNodeStyle({ node: source });
+    // Get source node style using style resolver with current interaction state
+    const sourceNodeStyle = this.styleResolver!.resolveNodeStyle({
+      node: source,
+      isHovered: this.isNodeHovered(source.id),
+      isSelected: this.isNodeSelected(source.id)
+    });
 
     // Link should stop outside the visual boundary of the source node
     const visualRadius = sourceNodeStyle.radius + sourceNodeStyle.strokeWidth/2;
@@ -627,14 +774,18 @@ export class Renderer {
     const dy = targetY - sourceY;
     const distance = Math.sqrt(dx * dx + dy * dy) || 1;
 
-    // Get target node style using style resolver
-    const targetNodeStyle = this.styleResolver!.resolveNodeStyle({ node: target });
+    // Get target node style using style resolver with current interaction state
+    const targetNodeStyle = this.styleResolver!.resolveNodeStyle({
+      node: target,
+      isHovered: this.isNodeHovered(target.id),
+      isSelected: this.isNodeSelected(target.id)
+    });
 
     // Link should stop where arrow base will be positioned
     // Arrow base is positioned arrowLength back from arrow tip
     // Arrow tip should touch node edge (visualRadius from center)
     const visualRadius = targetNodeStyle.radius + targetNodeStyle.strokeWidth/2;
-    const arrowLength = style.arrow?.enabled ? style.arrow.length : 0;
+    const arrowLength = style.arrow?.enabled ? (style.arrow.size ?? 4) : 0;
 
     // Calculate offset: if arrow enabled, position so arrow tip touches node edge
     // We want: arrowTip = visualRadius, link extends arrowLength back from tip
@@ -661,20 +812,15 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     sourcePoint: { x: number; y: number },
     targetPoint: { x: number; y: number },
-    arrowStyle: { length: number; width: number; fill: string }
+    arrowStyle: { size?: number; fill?: string }
   ): void {
     try {
       const dx = targetPoint.x - sourcePoint.x;
       const dy = targetPoint.y - sourcePoint.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      // const distance = Math.sqrt(dx * dx + dy * dy);
       const angle = Math.atan2(dy, dx);
 
-      const arrowLength = arrowStyle.length;
-
-      // Arrow tip should touch the node circumference
-      // Calculate node center from the original source/target coordinates
-      const nodeCenterX = sourcePoint.x + (dx * distance / Math.sqrt(dx * dx + dy * dy));
-      const nodeCenterY = sourcePoint.y + (dy * distance / Math.sqrt(dx * dx + dy * dy));
+      const arrowLength = arrowStyle.size ?? 4;
 
       // Arrow tip extends from link end toward node
       const arrowTipX = targetPoint.x + arrowLength * Math.cos(angle);
@@ -688,68 +834,8 @@ export class Renderer {
       const y2 = arrowTipY - arrowLength * Math.sin(angle + Math.PI / 6);
 
       // Comprehensive debug logging for arrow positioning (only for specific links)
-      // Note: We can't easily get source/target IDs here, but we can identify by coordinates
-      const isDebugLink = Math.abs(sourcePoint.x - 408.97) < 5 && Math.abs(targetPoint.x - 386.36) < 5;
 
-      if (isDebugLink) {
-        console.log('🏹 Arrow Vector Debug (3→4):', {
-          linkVector: {
-            sourcePoint: { x: sourcePoint.x, y: sourcePoint.y },
-            targetPoint: { x: targetPoint.x, y: targetPoint.y },
-            dx, dy, distance,
-            angleRadians: angle,
-            angleDegrees: (angle * 180 / Math.PI).toFixed(1)
-          },
-          arrowGeometry: {
-            length: arrowLength,
-            width: arrowStyle.width,
-            fill: arrowStyle.fill
-          },
-          arrowPositions: {
-            tip: { x: arrowTipX, y: arrowTipY },
-            base1: { x: x1, y: y1 },
-            base2: { x: x2, y: y2 }
-          },
-          calculations: {
-            tipOffset: {
-              x: arrowLength * Math.cos(angle),
-              y: arrowLength * Math.sin(angle),
-              description: 'Tip extends FROM targetPoint by this amount'
-            },
-            base1Offset: {
-              x: arrowLength * Math.cos(angle - Math.PI / 6),
-              y: arrowLength * Math.sin(angle - Math.PI / 6),
-              description: 'Base point 1 calculation'
-            },
-            base2Offset: {
-              x: arrowLength * Math.cos(angle + Math.PI / 6),
-              y: arrowLength * Math.sin(angle + Math.PI / 6),
-              description: 'Base point 2 calculation'
-            }
-          },
-          arrowTriangle: {
-            vertices: [
-              { x: arrowTipX, y: arrowTipY, label: 'tip' },
-              { x: x1, y: y1, label: 'base1' },
-              { x: x2, y: y2, label: 'base2' }
-            ],
-            center: {
-              x: (arrowTipX + x1 + x2) / 3,
-              y: (arrowTipY + y1 + y2) / 3
-            },
-            tipDirection: {
-              pointingToward: 'node center',
-              tipToTargetCenter: {
-                dx: 373.82 - arrowTipX,
-                dy: 280.34 - arrowTipY,
-                distance: Math.sqrt((373.82 - arrowTipX) ** 2 + (280.34 - arrowTipY) ** 2)
-              }
-            }
-          }
-        });
-      }
-
-      ctx.fillStyle = arrowStyle.fill;
+      ctx.fillStyle = arrowStyle.fill ?? '#000000';
       ctx.beginPath();
       ctx.moveTo(arrowTipX, arrowTipY);
       ctx.lineTo(x1, y1);
@@ -768,7 +854,7 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     source: V2Node,
     target: V2Node,
-    arrowStyle: { length: number; width: number; fill: string }
+    arrowStyle: { size?: number; fill?: string }
   ): void {
     this.renderArrowAtPoint(
       ctx,
@@ -788,6 +874,8 @@ export class Renderer {
       const { nodes } = this.config;
       const { width, height } = this.canvasState;
 
+      // Let D3 handle initial positioning - don't set specific positions
+      // The center force will pull nodes to (0,0) which works with identity transform
       for (const node of nodes) {
         if (node.x === undefined) node.x = Math.random() * width;
         if (node.y === undefined) node.y = Math.random() * height;
@@ -850,6 +938,514 @@ export class Renderer {
   }
 
   /**
+   * Build node index for O(1) lookups (Step 3 optimization)
+   */
+  private buildNodeIndex(): void {
+    if (!this.config) return;
+
+    try {
+      // Clear existing index
+      this.nodeMap.clear();
+
+      // Build node index for fast lookups
+      for (const node of this.config.nodes) {
+        this.nodeMap.set(node.id, node);
+      }
+
+      // Pre-resolve link references for O(1) access
+      for (const link of this.config.links) {
+        // Convert string source/target to node objects if needed
+        if (typeof link.source === 'string') {
+          const sourceNode = this.nodeMap.get(link.source);
+          if (sourceNode) {
+            (link.source as V2Node | string) = sourceNode;
+          }
+        }
+        if (typeof link.target === 'string') {
+          const targetNode = this.nodeMap.get(link.target);
+          if (targetNode) {
+            (link.target as V2Node | string) = targetNode;
+          }
+        }
+      }
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+    }
+  }
+
+  /**
+   * Get node by ID using O(1) lookup (Step 3 optimization)
+   */
+  private getNodeById(nodeId: string): V2Node | undefined {
+    return this.nodeMap.get(nodeId);
+  }
+
+  /**
+   * Render with z-index layers (for renderWithTransform)
+   */
+  private renderWithLayers(ctx: CanvasRenderingContext2D): void {
+    if (!this.config) return;
+
+    try {
+      // Get interaction states
+      const hoveredNode = this.getHoveredNode();
+      const selectedNode = this.getSelectedNode();
+      const hoveredLink = this.getHoveredLink();
+      const selectedLink = this.getSelectedLink();
+
+      // Create highlight checkers
+      const nodeHighlightChecker = ZIndexManager.createNodeHighlightChecker(
+        hoveredNode?.id || null,
+        selectedNode?.id || null
+      );
+
+      const linkHighlightChecker = ZIndexManager.createLinkHighlightChecker(
+        hoveredNode?.id || null,
+        selectedNode?.id || null,
+        hoveredLink ? this.getLinkId(hoveredLink) : null,
+        selectedLink ? this.getLinkId(selectedLink) : null
+      );
+
+      // Separate entities into layers
+      const linkLayers = ZIndexManager.separateIntoLayers(this.config.links, linkHighlightChecker);
+      const nodeLayers = ZIndexManager.separateIntoLayers(this.config.nodes, nodeHighlightChecker);
+
+      // Render in z-index order (background first, foreground last)
+      // BACKGROUND LAYER (appears behind)
+      this.renderLinksLayer(ctx, linkLayers.background);
+      this.renderLinkLabelsLayer(ctx, linkLayers.background);
+      this.renderNodesWithLabelsLayer(ctx, nodeLayers.background);
+
+      // FOREGROUND LAYER (appears on top)
+      this.renderLinksLayer(ctx, linkLayers.foreground);
+      this.renderLinkLabelsLayer(ctx, linkLayers.foreground);
+      this.renderNodesWithLabelsLayer(ctx, nodeLayers.foreground);
+
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+    }
+  }
+
+  /**
+   * Render with z-index layers and performance metrics (for main render)
+   */
+  private renderWithLayersAndMetrics(ctx: CanvasRenderingContext2D): void {
+    if (!this.config) return;
+
+    try {
+      // Get interaction states
+      const hoveredNode = this.getHoveredNode();
+      const selectedNode = this.getSelectedNode();
+      const hoveredLink = this.getHoveredLink();
+      const selectedLink = this.getSelectedLink();
+
+      // Create highlight checkers
+      const nodeHighlightChecker = ZIndexManager.createNodeHighlightChecker(
+        hoveredNode?.id || null,
+        selectedNode?.id || null
+      );
+
+      const linkHighlightChecker = ZIndexManager.createLinkHighlightChecker(
+        hoveredNode?.id || null,
+        selectedNode?.id || null,
+        hoveredLink ? this.getLinkId(hoveredLink) : null,
+        selectedLink ? this.getLinkId(selectedLink) : null
+      );
+
+      // Separate entities into layers
+      const linkLayers = ZIndexManager.separateIntoLayers(this.config.links, linkHighlightChecker);
+      const nodeLayers = ZIndexManager.separateIntoLayers(this.config.nodes, nodeHighlightChecker);
+
+      // Render with correct z-order and performance metrics
+      // Links (background and foreground)
+      let stepStart = performance.now();
+      this.renderLinksLayer(ctx, linkLayers.background);
+      this.renderLinksLayer(ctx, linkLayers.foreground);
+      this.performanceMetrics.renderLinks += performance.now() - stepStart;
+
+      // Nodes (background and foreground)
+      stepStart = performance.now();
+      this.renderNodesLayer(ctx, nodeLayers.background);
+      this.renderNodesLayer(ctx, nodeLayers.foreground);
+      this.performanceMetrics.renderNodes += performance.now() - stepStart;
+
+      // Link Labels (background and foreground)
+      stepStart = performance.now();
+      this.renderLinkLabelsLayer(ctx, linkLayers.background);
+      this.renderLinkLabelsLayer(ctx, linkLayers.foreground);
+      this.performanceMetrics.renderLinkLabels += performance.now() - stepStart;
+
+      // Node Labels (background and foreground) - rendered last so they appear on top
+      stepStart = performance.now();
+      this.renderNodeLabelsLayer(ctx, nodeLayers.background);
+      this.renderNodeLabelsLayer(ctx, nodeLayers.foreground);
+      this.performanceMetrics.renderNodeLabels += performance.now() - stepStart;
+
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+    }
+  }
+
+  /**
+   * Helper methods for getting current interaction states
+   */
+  private getHoveredNode(): V2Node | null {
+    if (!this.hoverManager) return null;
+    const hoverState = this.hoverManager.getHoverState();
+    return hoverState.currentHovered?.d.entityType === 'Node' ? hoverState.currentHovered.d as V2Node : null;
+  }
+
+  private getSelectedNode(): V2Node | null {
+    if (!this.selectionManager) return null;
+    const selectionState = this.selectionManager.getSelectionState();
+    return selectionState.selectedNode;
+  }
+
+  private getHoveredLink(): V2Link | null {
+    if (!this.hoverManager) return null;
+    const hoverState = this.hoverManager.getHoverState();
+    return hoverState.currentHovered?.d.entityType === 'Link' ? hoverState.currentHovered.d as V2Link : null;
+  }
+
+  private getSelectedLink(): V2Link | null {
+    if (!this.selectionManager) return null;
+    const selectionState = this.selectionManager.getSelectionState();
+    return selectionState.selectedLink;
+  }
+
+  /**
+   * Layer-specific rendering methods (render subsets of entities)
+   */
+  private renderNodesWithLabelsLayer(ctx: CanvasRenderingContext2D, nodes: V2Node[]): void {
+    if (!this.config || !this.styleResolver) return;
+
+    // Performance optimization: For large graphs (>10K nodes), apply zoom-based rendering
+    const nodeCount = this.config.nodes.length;
+    const isLargeGraph = nodeCount > 10000;
+
+    let currentZoom = 1;
+    let isZoomedOutForNodes = false;
+
+    if (isLargeGraph) {
+      currentZoom = this.canvasState ? d3ZoomTransform(this.canvasState.canvas).k : 1;
+      isZoomedOutForNodes = currentZoom <= 0.8;
+    }
+
+    // Simple performance fix: Cache node state lookups
+    const nodeStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+
+    for (const node of nodes) {
+      if (!node.x || !node.y) continue;
+
+      const nodeId = node.id;
+
+      // Cache the state lookup to avoid repeated expensive calls
+      let nodeState = nodeStateCache.get(nodeId);
+      if (!nodeState) {
+        nodeState = {
+          isHovered: this.isNodeHovered(nodeId),
+          isSelected: this.isNodeSelected(nodeId)
+        };
+        nodeStateCache.set(nodeId, nodeState);
+      }
+
+      // Render the node first
+      const nodeStyle = this.styleResolver.resolveNodeStyle({
+        node,
+        isHovered: nodeState.isHovered,
+        isSelected: nodeState.isSelected
+      });
+
+      // Render node circle
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, nodeStyle.radius, 0, 2 * Math.PI);
+      ctx.fillStyle = nodeStyle.fill;
+      ctx.fill();
+
+      if (nodeStyle.stroke && nodeStyle.strokeWidth > 0) {
+        ctx.strokeStyle = nodeStyle.stroke;
+        ctx.lineWidth = nodeStyle.strokeWidth;
+        ctx.stroke();
+      }
+
+      // Then render the node's label immediately after
+      // Skip labels for large graphs when zoomed out
+      if (isLargeGraph && isZoomedOutForNodes) {
+        continue;
+      }
+
+      // Resolve label style and check if enabled
+      const nodeStyleWithLabel = nodeStyle;
+      if (nodeStyleWithLabel.label && !nodeStyleWithLabel.label.enabled) continue;
+
+      // Use node.label if it exists, otherwise use node.id
+      const fullLabel = node.label || node.id;
+
+      // Apply text styling from resolved style or fall back to defaults
+      const defaultStyle = {
+        font: '9px sans-serif',
+        textAlign: 'center' as CanvasTextAlign,
+        textBaseline: 'middle' as CanvasTextBaseline,
+        fillStyle: '#ffffff',
+        offsetY: 0
+      };
+
+      if (nodeStyleWithLabel.label) {
+        ctx.font = nodeStyleWithLabel.label.font || defaultStyle.font;
+        ctx.textAlign = (nodeStyleWithLabel.label.textAlign as CanvasTextAlign) || defaultStyle.textAlign;
+        ctx.textBaseline = (nodeStyleWithLabel.label.textBaseline as CanvasTextBaseline) || defaultStyle.textBaseline;
+        ctx.fillStyle = nodeStyleWithLabel.label.textColor || defaultStyle.fillStyle;
+      } else {
+        // Use default style when no label config exists
+        ctx.font = defaultStyle.font;
+        ctx.textAlign = defaultStyle.textAlign;
+        ctx.textBaseline = defaultStyle.textBaseline;
+        ctx.fillStyle = defaultStyle.fillStyle;
+      }
+
+      // Truncate label to fit within node diameter
+      const maxWidth = (nodeStyle.radius * 2) - 6;
+      const truncatedLabel = this.truncateLabel(ctx, fullLabel, maxWidth);
+
+      // Render label at offset position
+      const labelY = node.y + (nodeStyleWithLabel.label?.offsetY || defaultStyle.offsetY);
+      ctx.fillText(truncatedLabel, node.x, labelY);
+    }
+  }
+
+  /**
+   * Helper method to truncate labels (copied from NodeLabelsRenderer)
+   */
+  private truncateLabel(ctx: CanvasRenderingContext2D, label: string, maxWidth: number): string {
+    let truncatedLabel = label;
+
+    // Check if label fits
+    if (ctx.measureText(truncatedLabel).width <= maxWidth) {
+      return truncatedLabel;
+    }
+
+    // Truncate until it fits
+    while (truncatedLabel.length > 1 && ctx.measureText(`${truncatedLabel}…`).width > maxWidth) {
+      truncatedLabel = truncatedLabel.slice(0, -1);
+    }
+
+    return truncatedLabel.length < label.length ? `${truncatedLabel}…` : truncatedLabel;
+  }
+  private renderLinksLayer(ctx: CanvasRenderingContext2D, links: V2Link[]): void {
+    if (!this.config || !this.styleResolver) return;
+
+    // Simple performance fix: Use direct method calls but cache them per link
+    const linkStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+
+    for (const link of links) {
+      const sourceNode = typeof link.source === 'string'
+        ? this.nodeMap.get(link.source)
+        : link.source;
+      const targetNode = typeof link.target === 'string'
+        ? this.nodeMap.get(link.target)
+        : link.target;
+
+      if (sourceNode && targetNode && sourceNode.x && sourceNode.y && targetNode.x && targetNode.y) {
+        const linkId = this.getLinkId(link);
+
+        // Cache the state lookup to avoid repeated expensive calls
+        let linkState = linkStateCache.get(linkId);
+        if (!linkState) {
+          linkState = {
+            isHovered: this.isLinkHovered(link),
+            isSelected: this.isLinkSelected(link)
+          };
+          linkStateCache.set(linkId, linkState);
+        }
+
+        const style = this.styleResolver.resolveLinkStyle({
+          link,
+          isHovered: linkState.isHovered,
+          isSelected: linkState.isSelected
+        });
+        this.renderDirectedLink(ctx, sourceNode, targetNode, style);
+      }
+    }
+  }
+
+  private renderLinkLabelsLayer(ctx: CanvasRenderingContext2D, links: V2Link[]): void {
+    if (!this.config || !this.styleResolver) return;
+
+    // Performance optimization: For large graphs (>10K nodes), only show link labels on interaction
+    const nodeCount = this.config.nodes.length;
+    const isLargeGraph = nodeCount > 10000;
+
+    if (isLargeGraph && !this.hasLoggedLargeGraphOptimization) {
+      console.log(`🚀 Large graph optimization: ${nodeCount} nodes detected. Link labels will only show on hover/selection for better performance.`);
+      this.hasLoggedLargeGraphOptimization = true;
+    }
+
+    // For large graphs only: Skip link labels if zoomed out too far (improves performance and readability)
+    if (isLargeGraph) {
+      const currentZoom = this.canvasState ? d3ZoomTransform(this.canvasState.canvas).k : 1;
+      const isZoomedOut = currentZoom <= 1.0;
+
+      if (isZoomedOut) {
+        return;
+      }
+    }
+
+    // Simple performance fix: Cache link state lookups
+    const linkStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+
+    LinkLabelsRenderer.renderWithVisibility(
+      ctx,
+      links,
+      (link) => {
+        // Only render labels for links that have a label text
+        if (!link.label) {
+          return null;
+        }
+
+        const linkId = this.getLinkId(link);
+
+        // Cache the state lookup to avoid repeated expensive calls
+        let linkState = linkStateCache.get(linkId);
+        if (!linkState) {
+          linkState = {
+            isHovered: this.isLinkHovered(link),
+            isSelected: this.isLinkSelected(link)
+          };
+          linkStateCache.set(linkId, linkState);
+        }
+
+        // For large graphs (>3K nodes), only show labels on interaction
+        if (isLargeGraph) {
+          const isInteractive = linkState.isHovered || linkState.isSelected;
+          if (!isInteractive) {
+            return null; // Skip non-interactive labels in large graphs
+          }
+        }
+
+        const style = this.styleResolver!.resolveLinkStyle({
+          link,
+          isHovered: linkState.isHovered,
+          isSelected: linkState.isSelected
+        });
+        return style.label || null;
+      },
+      (link) => this.getLinkMidpoint(link),
+      (linkId) => {
+        let linkState = linkStateCache.get(linkId);
+        if (!linkState) {
+          const link = links.find(l => this.getLinkId(l) === linkId);
+          if (link) {
+            linkState = {
+              isHovered: this.isLinkHovered(link),
+              isSelected: this.isLinkSelected(link)
+            };
+            linkStateCache.set(linkId, linkState);
+          }
+        }
+        return linkState?.isHovered || false;
+      },
+      (linkId) => {
+        let linkState = linkStateCache.get(linkId);
+        if (!linkState) {
+          const link = links.find(l => this.getLinkId(l) === linkId);
+          if (link) {
+            linkState = {
+              isHovered: this.isLinkHovered(link),
+              isSelected: this.isLinkSelected(link)
+            };
+            linkStateCache.set(linkId, linkState);
+          }
+        }
+        return linkState?.isSelected || false;
+      }
+    );
+  }
+
+  private renderNodesLayer(ctx: CanvasRenderingContext2D, nodes: V2Node[]): void {
+    if (!this.config || !this.styleResolver) return;
+
+    // Simple performance fix: Cache node state lookups
+    const nodeStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+
+    NodesRenderer.renderWithStyleResolver(
+      ctx,
+      nodes,
+      this.styleResolver,
+      (nodeId) => {
+        let nodeState = nodeStateCache.get(nodeId);
+        if (!nodeState) {
+          nodeState = {
+            isHovered: this.isNodeHovered(nodeId),
+            isSelected: this.isNodeSelected(nodeId)
+          };
+          nodeStateCache.set(nodeId, nodeState);
+        }
+        return nodeState.isHovered;
+      },
+      (nodeId) => {
+        let nodeState = nodeStateCache.get(nodeId);
+        if (!nodeState) {
+          nodeState = {
+            isHovered: this.isNodeHovered(nodeId),
+            isSelected: this.isNodeSelected(nodeId)
+          };
+          nodeStateCache.set(nodeId, nodeState);
+        }
+        return nodeState.isSelected;
+      }
+    );
+  }
+
+  private renderNodeLabelsLayer(ctx: CanvasRenderingContext2D, nodes: V2Node[]): void {
+    if (!this.config || !this.styleResolver) return;
+
+    // Performance optimization: For large graphs (>10K nodes), apply zoom-based node label rendering
+    const nodeCount = this.config.nodes.length;
+    const isLargeGraph = nodeCount > 10000;
+
+    if (isLargeGraph) {
+      // For large graphs only: Skip node labels if zoomed out too far
+      const currentZoom = this.canvasState ? d3ZoomTransform(this.canvasState.canvas).k : 1;
+      const isZoomedOutForNodes = currentZoom <= 0.8;
+
+      if (isZoomedOutForNodes) {
+        return;
+      }
+    }
+
+    // Simple performance fix: Cache node state lookups
+    const nodeStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+
+    NodeLabelsRenderer.renderWithStyleResolver(
+      ctx,
+      nodes,
+      this.styleResolver,
+      (nodeId) => {
+        let nodeState = nodeStateCache.get(nodeId);
+        if (!nodeState) {
+          nodeState = {
+            isHovered: this.isNodeHovered(nodeId),
+            isSelected: this.isNodeSelected(nodeId)
+          };
+          nodeStateCache.set(nodeId, nodeState);
+        }
+        return nodeState.isHovered;
+      },
+      (nodeId) => {
+        let nodeState = nodeStateCache.get(nodeId);
+        if (!nodeState) {
+          nodeState = {
+            isHovered: this.isNodeHovered(nodeId),
+            isSelected: this.isNodeSelected(nodeId)
+          };
+          nodeStateCache.set(nodeId, nodeState);
+        }
+        return nodeState.isSelected;
+      }
+    );
+  }
+
+  /**
    * Destroy renderer and clean up resources
    */
   destroy(): void {
@@ -858,6 +1454,10 @@ export class Renderer {
       this.canvasState = undefined;
       this.hoverManager = undefined;
       this.styleResolver = undefined;
+      this.nodeMap.clear();
+      // Reset shadow canvas optimization state (Step 6 optimization)
+      this.shadowCanvasDirty = false;
+      this.lastShadowRenderTime = 0;
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }

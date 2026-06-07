@@ -5,19 +5,30 @@
  */
 
 import { select as d3Select } from 'd3-selection';
-import { drag as d3Drag } from 'd3-drag';
+import { drag as d3Drag, D3DragEvent } from 'd3-drag';
 import { zoomTransform as d3ZoomTransform } from 'd3-zoom';
 import { sum as d3Sum } from 'd3-array';
 
 import { ErrorHandler, InteractionError } from '../utils';
-import { PointerManager } from './pointer-manager';
 import { PhysicsManager } from '../core/physics-manager';
+import { V2Node } from '../types/graph.types';
 
 import { HoverManager } from './hover-manager';
 
+// Extended node type with drag-specific properties
+interface DraggableV2Node extends V2Node {
+  __initialDragPos?: {
+    x?: number;
+    y?: number;
+    fx?: number | null;
+    fy?: number | null;
+  };
+  __dragged?: boolean;
+}
+
 export interface DragConfig {
   canvas: HTMLCanvasElement;
-  pointerManager: PointerManager;
+  // pointerManager: PointerManager;
   physicsManager: PhysicsManager;
   hoverManager: HoverManager;
   onRender: () => void;
@@ -64,12 +75,12 @@ export class DragManager {
   /**
    * Get drag subject (node under pointer)
    */
-  private getDragSubject(): any {
+  private getDragSubject(): DraggableV2Node | null {
     if (!this.config) return null;
 
     try {
       const obj = this.config.hoverManager.getObjUnderPointer();
-      return (obj && obj.type === 'Node') ? obj.d : null; // Only drag nodes
+      return (obj && obj.d.entityType === 'Node') ? obj.d as DraggableV2Node : null; // Only drag nodes
     } catch (error) {
       ErrorHandler.logError(error as Error);
       return null;
@@ -79,10 +90,10 @@ export class DragManager {
   /**
    * Handle drag start
    */
-  private handleDragStart(event: any): void {
+  private handleDragStart(event: D3DragEvent<HTMLCanvasElement, unknown, DraggableV2Node>): void {
     if (!this.config) return;
 
-    const obj = event.subject as any;
+    const obj = event.subject;
     if (!obj) return; // No node to drag
 
     try {
@@ -115,27 +126,31 @@ export class DragManager {
   /**
    * Handle drag movement
    */
-  private handleDrag(event: any): void {
+  private handleDrag(event: D3DragEvent<HTMLCanvasElement, unknown, DraggableV2Node>): void {
     if (!this.config) return;
 
-    const obj = event.subject as any;
+    const obj = event.subject;
     if (!obj) return; // No node to drag
 
     try {
       const initPos = obj.__initialDragPos;
+      if (!initPos) return; // No initial position stored
+
       const dragPos = event;
 
       // Get current zoom scale
       const k = d3ZoomTransform(this.config.canvas).k;
 
       // Move fx/fy (and x/y) based on scaled drag distance
-      obj.fx = obj.x = initPos.x + (dragPos.x - initPos.x) / k;
-      obj.fy = obj.y = initPos.y + (dragPos.y - initPos.y) / k;
+      const initX = initPos.x ?? 0;
+      const initY = initPos.y ?? 0;
+      obj.fx = obj.x = initX + (dragPos.x - initX) / k;
+      obj.fy = obj.y = initY + (dragPos.y - initY) / k;
 
       // Only engage full drag if distance reaches threshold (force-graph pattern)
       if (!obj.__dragged && (this.DRAG_CLICK_TOLERANCE_PX >= Math.sqrt(d3Sum([
-        (event.x - initPos.x) ** 2,
-        (event.y - initPos.y) ** 2
+        (event.x - initX) ** 2,
+        (event.y - initY) ** 2
       ])))) {
         return;
       }
@@ -159,10 +174,10 @@ export class DragManager {
   /**
    * Handle drag end
    */
-  private handleDragEnd(event: any): void {
+  private handleDragEnd(event: D3DragEvent<HTMLCanvasElement, unknown, DraggableV2Node>): void {
     if (!this.config) return;
 
-    const obj = event.subject as any;
+    const obj = event.subject;
     if (!obj) return; // No node was being dragged
 
     try {
@@ -173,9 +188,11 @@ export class DragManager {
         this.config.physicsManager.cooldown();
       }
 
-      // Restore original fx/fy state
-      if (initPos.fx === undefined) { obj.fx = undefined; }
-      if (initPos.fy === undefined) { obj.fy = undefined; }
+      // Restore original fx/fy state if initPos exists
+      if (initPos) {
+        if (initPos.fx === undefined) { obj.fx = undefined; }
+        if (initPos.fy === undefined) { obj.fy = undefined; }
+      }
       delete obj.__initialDragPos;
 
       // Remove drag cursor

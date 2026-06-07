@@ -4,11 +4,11 @@
  */
 
 // Import V1 implementation
-import { createGraph } from '../../src/v1';
-import type { GraphInstance as V1GraphInstance } from '../../src/v1/contracts/graph-instance.interface';
+// import { createGraph } from '../../src/v1';
+// import type { GraphInstance as V1GraphInstance } from '../../src/v1/contracts/graph-instance.interface';
 
-// Import V2 implementation (V1-compatible wrapper)
-import { createGraph as createV2Graph } from '../../src/v2';
+// Import V2 implementation (direct V2 implementation, not wrapper)
+import { createV2Graph } from '../../src/v2';
 import type { GraphInstance as V2GraphInstance } from '../../src/v2';
 
 // Import data generator with V1 types
@@ -26,7 +26,7 @@ interface PerformanceMetrics {
 }
 
 class PollyGraphDemo {
-  private currentGraph: V1GraphInstance | V2GraphInstance | null = null;
+  private currentGraph: V2GraphInstance | null = null;
   private currentVersion: 'v1' | 'v2' = 'v1';
   private currentData: TestGraphData | null = null;
   private metrics: PerformanceMetrics = { renderTime: 0, initTime: 0, dataLoadTime: 0, lastUpdate: 0 };
@@ -36,6 +36,8 @@ class PollyGraphDemo {
     topologySelect: document.getElementById('topology-select') as HTMLSelectElement,
     generateBtn: document.getElementById('generate-btn') as HTMLButtonElement,
     resetViewBtn: document.getElementById('reset-view-btn') as HTMLButtonElement,
+    exportPngBtn: document.getElementById('export-png-btn') as HTMLButtonElement,
+    exportShadowBtn: document.getElementById('export-shadow-btn') as HTMLButtonElement,
     stats: document.getElementById('stats') as HTMLDivElement,
     container: document.getElementById('graph-container') as HTMLDivElement,
     currentVersion: document.getElementById('current-version') as HTMLSpanElement,
@@ -68,6 +70,14 @@ class PollyGraphDemo {
 
     this.elements.toggleVersion.addEventListener('click', () => {
       this.toggleVersion();
+    });
+
+    this.elements.exportPngBtn.addEventListener('click', () => {
+      this.exportPNG();
+    });
+
+    this.elements.exportShadowBtn.addEventListener('click', () => {
+      this.exportShadowCanvas();
     });
   }
 
@@ -234,14 +244,14 @@ class PollyGraphDemo {
       const initStart = performance.now();
 
       // Create V1 graph
-      this.currentGraph = createGraph({
-        container: this.elements.container,
-        nodes: this.currentData.nodes,
-        links: this.currentData.links,
-        controls: CONTROLS_CONFIG,
-        legend: LEGEND_CONFIG,
-        interaction: INTERACTION_CONFIG
-      });
+      // this.currentGraph = createGraph({
+      //   container: this.elements.container,
+      //   nodes: this.currentData.nodes,
+      //   links: this.currentData.links,
+      //   controls: CONTROLS_CONFIG,
+      //   legend: LEGEND_CONFIG,
+      //   interaction: INTERACTION_CONFIG
+      // });
 
       const initTime = performance.now() - initStart;
 
@@ -472,24 +482,8 @@ class PollyGraphDemo {
   }
 
   private showV2FeatureInfo() {
-    // Create a temporary info message about link labels
-    const originalStats = this.elements.stats.innerHTML;
-
-    this.elements.stats.innerHTML = `
-      <div style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 12px; border-radius: 6px; text-align: center; animation: fadeIn 0.3s ease-in;">
-        <strong>🎯 V2 Canvas Features Active!</strong><br>
-        <span style="font-size: 13px;">
-          📍 Hover over links to see labels appear
-          • <span style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;">Blue labels</span> always visible
-          • <span style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;">Green labels</span> on hover
-        </span>
-      </div>
-    `;
-
-    // Restore original stats after 4 seconds
-    setTimeout(() => {
-      this.elements.stats.innerHTML = originalStats;
-    }, 4000);
+    // Removed auto-hiding message that causes resize operations
+    console.log('🎯 V2 Canvas Features Active! Hover over links to see labels appear');
   }
 
   private logLinkLabelStats() {
@@ -511,12 +505,52 @@ class PollyGraphDemo {
     console.log(`💡 Tip: Hover over links to see green labels appear!`);
     console.groupEnd();
   }
+
+  /**
+   * Export current graph as PNG
+   */
+  private exportPNG(): void {
+    try {
+      if (this.currentGraph) {
+        // Use exportGraph for V2 or generate PNG for V1
+        if ('exportGraph' in this.currentGraph) {
+          this.currentGraph.exportGraph(`polly-graph-${this.isV2Mode ? 'v2' : 'v1'}.png`);
+        } else if ('exportToPNG' in this.currentGraph) {
+          (this.currentGraph as any).exportToPNG(`polly-graph-${this.isV2Mode ? 'v2' : 'v1'}.png`);
+        } else {
+          console.warn('Export not supported for current graph version');
+        }
+      } else {
+        console.warn('No graph loaded to export');
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  }
+
+  /**
+   * Export shadow canvas for hit detection debugging
+   */
+  private exportShadowCanvas(): void {
+    try {
+      if (this.currentGraph && 'debugShadowCanvas' in this.currentGraph) {
+        (this.currentGraph as any).debugShadowCanvas();
+        console.log('Shadow canvas visualization enabled - check the canvas for hit detection areas');
+      } else {
+        console.warn('Shadow canvas debugging not supported for current graph version');
+      }
+    } catch (error) {
+      console.error('Shadow canvas export failed:', error);
+    }
+  }
 }
 
 // Initialize the demo when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   try {
-    new PollyGraphDemo();
+    const demo = new PollyGraphDemo();
+    // Store demo instance for performance debugging
+    (window as any).pollyDemo._instance = demo;
   } catch (error) {
     console.error('Failed to initialize Polly Graph Demo:', error);
     document.getElementById('stats')!.innerHTML =
@@ -550,6 +584,36 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('Garbage collection forced');
     } else {
       console.log('Garbage collection not available. Use Chrome DevTools with --enable-precise-memory-info');
+    }
+  },
+
+  // Performance debugging methods
+  logPerformanceMetrics: () => {
+    const demo = (window as any).pollyDemo._instance;
+    if (demo && demo.currentGraph && demo.currentGraph.logPerformanceMetrics) {
+      demo.currentGraph.logPerformanceMetrics();
+    } else {
+      console.warn('Performance metrics not available. Make sure V2 graph is loaded.');
+    }
+  },
+
+  getPerformanceMetrics: () => {
+    const demo = (window as any).pollyDemo._instance;
+    if (demo && demo.currentGraph && demo.currentGraph.getPerformanceMetrics) {
+      return demo.currentGraph.getPerformanceMetrics();
+    } else {
+      console.warn('Performance metrics not available. Make sure V2 graph is loaded.');
+      return null;
+    }
+  },
+
+  resetPerformanceMetrics: () => {
+    const demo = (window as any).pollyDemo._instance;
+    if (demo && demo.currentGraph && demo.currentGraph.resetPerformanceMetrics) {
+      demo.currentGraph.resetPerformanceMetrics();
+      console.log('✅ Performance metrics reset');
+    } else {
+      console.warn('Performance metrics not available. Make sure V2 graph is loaded.');
     }
   }
 };

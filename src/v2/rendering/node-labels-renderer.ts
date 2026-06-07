@@ -5,7 +5,7 @@
  */
 
 import { V2Node } from '../types';
-import { ErrorHandler, RenderError } from '../utils';
+import { ErrorHandler, RenderError, StyleResolver } from '../utils';
 
 export interface NodeLabelStyle {
   font: string;
@@ -48,7 +48,7 @@ export class NodeLabelsRenderer {
         const y = node.y!;
 
         // Use node.label if it exists, otherwise use node.id
-        const fullLabel = (node as any).label || node.id;
+        const fullLabel = node.label || node.id;
 
         // V1-compatible truncation: fit label within node diameter minus padding
         const maxWidth = (nodeRadius * 2) - 6; // V1 calculation
@@ -82,6 +82,63 @@ export class NodeLabelsRenderer {
     }
 
     return truncatedLabel.length < label.length ? `${truncatedLabel}…` : truncatedLabel;
+  }
+
+  /**
+   * Render node labels with style resolver (for layered rendering)
+   */
+  static renderWithStyleResolver(
+    ctx: CanvasRenderingContext2D,
+    nodes: V2Node[],
+    styleResolver: StyleResolver,
+    isNodeHovered: (nodeId: string) => boolean,
+    isNodeSelected?: (nodeId: string) => boolean
+  ): void {
+    try {
+      for (const node of nodes) {
+        if (!node.x || !node.y) continue;
+
+        // Resolve node style to get label properties
+        const nodeStyle = styleResolver.resolveNodeStyle({
+          node,
+          isHovered: isNodeHovered(node.id),
+          isSelected: isNodeSelected ? isNodeSelected(node.id) : false
+        });
+
+        // Check if label should be shown
+        const nodeStyleWithLabel = nodeStyle;
+        if (nodeStyleWithLabel.label && !nodeStyleWithLabel.label.enabled) continue;
+
+        // Use node.label if it exists, otherwise use node.id
+        const fullLabel = node.label || node.id;
+
+        // Apply text styling from resolved style or fall back to defaults
+        if (nodeStyleWithLabel.label) {
+          ctx.font = nodeStyleWithLabel.label.font || this.defaultStyle.font;
+          ctx.textAlign = (nodeStyleWithLabel.label.textAlign as CanvasTextAlign) || this.defaultStyle.textAlign;
+          ctx.textBaseline = (nodeStyleWithLabel.label.textBaseline as CanvasTextBaseline) || this.defaultStyle.textBaseline;
+          ctx.fillStyle = nodeStyleWithLabel.label.textColor || this.defaultStyle.fillStyle;
+        } else {
+          // Use default style when no label config exists
+          ctx.font = this.defaultStyle.font;
+          ctx.textAlign = this.defaultStyle.textAlign;
+          ctx.textBaseline = this.defaultStyle.textBaseline;
+          ctx.fillStyle = this.defaultStyle.fillStyle;
+        }
+
+        // V1-compatible truncation: fit label within node diameter minus padding
+        const maxWidth = (nodeStyle.radius * 2) - 6; // V1 calculation
+        const truncatedLabel = this.truncateLabel(ctx, fullLabel, maxWidth);
+
+        // Render label at offset position
+        const labelY = node.y + (nodeStyleWithLabel.label?.offsetY || this.defaultStyle.offsetY);
+
+        ctx.fillText(truncatedLabel, node.x, labelY);
+      }
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+      throw new RenderError('Failed to render node labels with style resolver');
+    }
   }
 
   /**
