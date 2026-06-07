@@ -54,8 +54,12 @@ export class ZoomManager {
           // Don't pan if right mouse button
           if (event.button) return false;
 
-          // Don't pan if mouse is over an entity (let selection/hover handle it)
-          if (config.isOverEntity && config.isOverEntity()) return false;
+          // // Don't pan if mouse is over an entity (let selection/hover handle it)
+          // if (config.isOverEntity && config.isOverEntity()) return false;
+
+          if (config.isOverEntity && config.isOverEntity() && event.type !== 'wheel') {
+            return false;
+          }
 
           return true;
         })
