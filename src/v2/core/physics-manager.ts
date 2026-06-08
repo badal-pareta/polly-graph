@@ -12,7 +12,8 @@ import {
   Simulation,
   ForceLink,
   ForceManyBody,
-  ForceCenter
+  ForceCenter,
+  forceCollide
 } from 'd3-force';
 
 import { V2Node, V2Link } from '../types';
@@ -59,16 +60,16 @@ export class PhysicsManager {
 
       // Calculate adaptive force strengths based on node count and graph density
       const nodeCount = config.nodes.length;
-      const linkCount = config.links.length;
+      // const linkCount = config.links.length;
       const graphArea = config.width * config.height;
 
       // Adaptive charge strength: reduce repulsion for dense graphs
-      const baseChargeStrength = -600; // Reduced base from -800
+      // const baseChargeStrength = -600; // Reduced base from -800
 
       // Calculate true density: nodes per unit area (normalized to 100k pixel units)
       const nodeDensity = nodeCount / (graphArea / 100000); // Nodes per 100k pixels
       const densityFactor = Math.min(nodeDensity, 2); // Cap at 2x adjustment
-      const adaptiveChargeStrength = baseChargeStrength / (1 + densityFactor * 0.4);
+      // const adaptiveChargeStrength = baseChargeStrength / (1 + densityFactor * 0.4);
 
       // Adaptive velocity decay: faster settling for dense graphs
       const baseVelocityDecay = 0.4;
@@ -79,33 +80,39 @@ export class PhysicsManager {
       const adaptiveAlphaDecay = Math.min(baseAlphaDecay + (densityFactor * 0.01), 0.05);
 
       // Debug logging for adaptive physics (can be removed in production)
-      console.log('🔬 Adaptive Physics:', {
-        nodeCount,
-        linkCount,
-        graphArea: Math.round(graphArea),
-        nodeDensity: nodeDensity.toFixed(3),
-        densityFactor: densityFactor.toFixed(2),
-        chargeStrength: adaptiveChargeStrength.toFixed(0),
-        velocityDecay: adaptiveVelocityDecay.toFixed(2),
-        alphaDecay: adaptiveAlphaDecay.toFixed(3),
-        maxDistance: Math.max(300, 600 - densityFactor * 100)
-      });
+      // console.log('🔬 Adaptive Physics:', {
+      //   nodeCount,
+      //   linkCount,
+      //   graphArea: Math.round(graphArea),
+      //   nodeDensity: nodeDensity.toFixed(3),
+      //   densityFactor: densityFactor.toFixed(2),
+      //   chargeStrength: adaptiveChargeStrength.toFixed(0),
+      //   velocityDecay: adaptiveVelocityDecay.toFixed(2),
+      //   alphaDecay: adaptiveAlphaDecay.toFixed(3),
+      //   maxDistance: Math.max(300, 600 - densityFactor * 100)
+      // });
 
       // Create D3 force simulation with adaptive parameters
       this.simulation = d3ForceSimulation<V2Node>(config.nodes)
         .force('link', d3ForceLink<V2Node, V2Link>(config.links)
           .id((d: V2Node) => d.id)
-          .distance(100) // Increase default link distance for better spacing
-          .strength(0.2) // Much weaker link strength to allow repulsion to work
+          .distance(150) // Increase default link distance for better spacing
+          .strength(0.4) // Much weaker link strength to allow repulsion to work
         )
         .force('charge', d3ForceManyBody()
-          .strength(adaptiveChargeStrength) // Adaptive repulsion strength
-          .distanceMin(1) // Minimum distance for repulsion
-          .distanceMax(Math.max(300, 600 - densityFactor * 100)) // Reduce max distance for dense graphs
+          .strength(-500) // Adaptive repulsion strength
+          // .distanceMin(1) // Minimum distance for repulsion
+          // .distanceMax(Math.max(300, 600 - densityFactor * 100)) // Reduce max distance for dense graphs
+        )
+        .force('collision', forceCollide<V2Node>()
+          .radius(node => this.getNodeRadius(node) + 2)
+          .strength(1)
         )
         .force('center', d3ForceCenter(0, 0)
-          .strength(0.1) // Center around origin like force-graph
+          .strength(.5) // Center around origin like force-graph
         )
+        // .force('x', forceX(0).strength(0.05))
+        // .force('y', forceY(0).strength(0.05))
         .velocityDecay(adaptiveVelocityDecay) // Adaptive velocity decay for faster settling
         .alphaDecay(adaptiveAlphaDecay) // Adaptive alpha decay for better convergence
         .on('tick', config.onTick)

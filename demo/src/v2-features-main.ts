@@ -13,21 +13,21 @@ interface TestData {
   physics?: boolean;
 }
 
-interface TestGraph {
-  // V2Instance methods
-  render(): void;
-  destroy(): void;
-  exportGraph(fileName?: string): void;
-  on(event: string, handler: (...args: unknown[]) => void): () => void;
-  off(event: string, handler?: (...args: unknown[]) => void): void;
+// interface TestGraph {
+//   // V2Instance methods
+//   render(): void;
+//   destroy(): void;
+//   exportGraph(fileName?: string): void;
+//   on(event: string, handler: (...args: unknown[]) => void): () => void;
+//   off(event: string, handler?: (...args: unknown[]) => void): void;
 
-  // Add any debug methods that might exist
-  debugShadowCanvas?: () => void;
-  getCanvas?: () => HTMLCanvasElement;
-  pause?: () => void;
-}
+//   // Add any debug methods that might exist
+//   debugShadowCanvas?: () => void;
+//   getCanvas?: () => HTMLCanvasElement;
+//   pause?: () => void;
+// }
 
-let currentGraph: TestGraph | null = null;
+let currentGraph: V2Instance | null = null;
 let hitVisualizationVisible = false;
 
 // Test basic graph functionality
