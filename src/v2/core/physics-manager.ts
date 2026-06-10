@@ -18,6 +18,7 @@ import {
 
 import { V2Node, V2Link, PhysicsConfig } from '../types';
 import { ErrorHandler, ValidationError, TimerManager } from '../utils';
+import { StateManager } from './state-manager';
 
 export class PhysicsManager {
   private simulation?: Simulation<V2Node, V2Link>;
@@ -27,7 +28,9 @@ export class PhysicsManager {
   private hasInitialAutoFitCompleted = false;
   private timerManager: TimerManager;
   private isVisibilityListenerAttached = false;
-  private nodeMap = new Map<string, V2Node>();
+  private stateManager = new StateManager();
+  private isWarmingUp = false;
+  private warmupSteps = 0;
 
   constructor(timerManager: TimerManager) {
     this.timerManager = timerManager;
@@ -69,84 +72,74 @@ export class PhysicsManager {
       const adaptiveAlphaDecay = Math.min(baseAlphaDecay + (densityFactor * 0.01), 0.05);
 
       if (this.simulation) { this.simulation.stop(); }
-      this.buildNodeIndex();
 
-      // Create D3 force simulation with adaptive parameters
-const linkDistance =
-  nodeCount > 10000 ? 220 :
-  nodeCount > 5000 ? 190 :
-  nodeCount > 2000 ? 170 :
-  150;
+      // Initialize StateManager with graph data
+      this.stateManager.initialize({ nodes: config.nodes, links: config.links });
 
-const chargeStrength =
-  nodeCount > 10000 ? -350 :
-  nodeCount > 5000 ? -400 :
-  nodeCount > 2000 ? -450 :
-  -500;
+      // Create D3 force simulation with improved anti-clustering parameters
+      const linkDistance = nodeCount > 10000 ? 400 : nodeCount > 6000 ? 350 : nodeCount > 2000 ? 300 : 250;
+      const linkStrength = nodeCount > 10000 ? 0.08 : nodeCount > 6000 ? 0.12 : nodeCount > 2000 ? 0.2 : 0.4;
+      const chargeStrength = nodeCount > 10000 ? -800 : nodeCount > 6000 ? -700 : nodeCount > 2000 ? -600 : -500;
 
-const collisionRadius =
-  nodeCount > 10000 ? 1 :
-  nodeCount > 5000 ? 2 :
-  2;
+      const collisionRadius =
+        nodeCount > 10000 ? 5 :
+        nodeCount > 6000 ? 4 :
+        3;
 
-const collisionIterations =
-  nodeCount > 10000 ? 1 :
-  nodeCount > 5000 ? 1 :
-  2;
+      const collisionIterations =
+        nodeCount > 10000 ? 2 :
+        nodeCount > 6000 ? 2 :
+        2;
 
-const centerStrength =
-  nodeCount > 5000 ? 0.15 : 0.5;
+      const centerStrength = nodeCount > 6000 ? 0.05 : 0.3;
 
-const linkStrength =
-  nodeCount > 10000 ? 0.15 :
-  nodeCount > 5000 ? 0.25 :
-  0.4;
+      this.simulation = d3ForceSimulation<V2Node>(config.nodes)
+        .force('link', d3ForceLink<V2Node, V2Link>(config.links)
+          .id((d: V2Node) => d.id)
+          .distance(linkDistance)
+          .strength(linkStrength)
+          .iterations(1)
+        )
+        .force('charge', d3ForceManyBody<V2Node>()
+          .strength(chargeStrength)
+          .theta(nodeCount > 6000 ? 0.8 : 0.9)
+          .distanceMax(nodeCount > 10000 ? 800 : nodeCount > 6000 ? 700 : 1000)
+        )
+        .force('collision', forceCollide<V2Node>()
+          .radius(node => (node.style?.radius ?? 20) + collisionRadius)
+          .strength(1)
+          .iterations(collisionIterations)
+        )
+        .force('center', d3ForceCenter(0, 0).strength(centerStrength)
+        )
+        .velocityDecay(
+          nodeCount > 10000
+            ? 0.4
+            : nodeCount > 6000
+            ? 0.5
+            : adaptiveVelocityDecay
+        )
+        .alphaDecay(
+          nodeCount > 10000
+            ? 0.01
+            : nodeCount > 6000
+            ? 0.02
+            : adaptiveAlphaDecay
+        )
+        .alphaMin(
+          nodeCount > 10000
+            ? 0.01
+            : nodeCount > 6000
+            ? 0.02
+            : 0.001
+        )
+        .on('tick', () => this.handleTick(config.onTick))
+        .on('end', () => this.handleSimulationEnd());
+      // Start smooth warmup for large graphs
+      if (nodeCount > 1000) {
+        this.startSmoothWarmup();
+      }
 
-this.simulation = d3ForceSimulation<V2Node>(config.nodes)
-  .force(
-    'link',
-    d3ForceLink<V2Node, V2Link>(config.links)
-      .id((d: V2Node) => d.id)
-      .distance(linkDistance)
-      .strength(linkStrength)
-      .iterations(1)
-  )
-  .force(
-    'charge',
-    d3ForceManyBody<V2Node>()
-      .strength(chargeStrength)
-      .theta(nodeCount > 5000 ? 1.2 : 0.9)
-      .distanceMax(nodeCount > 5000 ? 500 : 1000)
-  )
-  .force(
-    'collision',
-    forceCollide<V2Node>()
-      .radius(node => (node.style?.radius ?? 20) + collisionRadius)
-      .strength(1)
-      .iterations(collisionIterations)
-  )
-  .force(
-    'center',
-    d3ForceCenter(0, 0)
-      .strength(centerStrength)
-  )
-  .velocityDecay(
-    nodeCount > 5000
-      ? 0.65
-      : adaptiveVelocityDecay
-  )
-  .alphaDecay(
-    nodeCount > 5000
-      ? 0.05
-      : adaptiveAlphaDecay
-  )
-  .alphaMin(
-    nodeCount > 5000
-      ? 0.05
-      : 0.001
-  )
-  .on('tick', config.onTick)
-  .on('end', () => this.handleSimulationEnd());
       // Setup cooldown timer if specified
       if (config.cooldownTime) {
         this.setupCooldownTimer(config.cooldownTime);
@@ -163,11 +156,80 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
   }
 
   /**
+   * Handle tick with smooth warmup progression
+   */
+  private handleTick(originalOnTick: () => void): void {
+    if (this.isWarmingUp) {
+      this.progressWarmup();
+    }
+    originalOnTick();
+  }
+
+  /**
+   * Start smooth warmup process for large graphs
+   */
+  private startSmoothWarmup(): void {
+    if (!this.simulation || !this.config) return;
+
+    this.isWarmingUp = true;
+    this.warmupSteps = 0;
+
+    // Start with reduced forces
+    this.applyWarmupForces(0.2);
+  }
+
+  /**
+   * Progress warmup over time for smoother initial animation
+   */
+  private progressWarmup(): void {
+    if (!this.simulation || !this.config) return;
+
+    this.warmupSteps++;
+    const maxWarmupSteps = 60; // ~1 second at 60fps
+    const progress = Math.min(this.warmupSteps / maxWarmupSteps, 1);
+
+    if (progress >= 1) {
+      // Warmup complete
+      this.isWarmingUp = false;
+      this.applyWarmupForces(1.0);
+    } else {
+      // Gradually increase force strength
+      const forceMultiplier = 0.2 + (progress * 0.8); // 0.2 to 1.0
+      this.applyWarmupForces(forceMultiplier);
+    }
+  }
+
+  /**
+   * Apply scaled forces during warmup
+   */
+  private applyWarmupForces(multiplier: number): void {
+    if (!this.simulation || !this.config) return;
+
+    const nodeCount = this.config.nodes.length;
+
+    // Scale down forces during warmup
+    const linkStrength = (nodeCount > 10000 ? 0.08 : nodeCount > 6000 ? 0.12 : nodeCount > 2000 ? 0.2 : 0.4) * multiplier;
+    const chargeStrength = (nodeCount > 10000 ? -800 : nodeCount > 6000 ? -700 : nodeCount > 2000 ? -600 : -500) * multiplier;
+
+    const linkForce = this.simulation.force('link') as ForceLink<V2Node, V2Link> | undefined;
+    const chargeForce = this.simulation.force('charge') as ForceManyBody<V2Node> | undefined;
+
+    if (linkForce) {
+      linkForce.strength(linkStrength);
+    }
+
+    if (chargeForce) {
+      chargeForce.strength(chargeStrength);
+    }
+  }
+
+  /**
    * Handle simulation end
    */
   private handleSimulationEnd(): void {
     try {
       this.simulationEndTime = performance.now();
+      this.isWarmingUp = false;
 
       if (this.config?.onEnd) {
         this.config.onEnd();
@@ -210,41 +272,6 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
     }
   }
 
-  /**
-   * Build node index for O(1) lookups (Step 3 optimization)
-   */
-  private buildNodeIndex(): void {
-    if (!this.config) return;
-
-    try {
-      // Clear existing index
-      this.nodeMap.clear();
-
-      // Build node index for fast lookups
-      for (const node of this.config.nodes) {
-        this.nodeMap.set(node.id, node);
-      }
-
-      // Pre-resolve link references for O(1) access
-      for (const link of this.config.links) {
-        // Convert string source/target to node objects if needed
-        if (typeof link.source === 'string') {
-          const sourceNode = this.nodeMap.get(link.source);
-          if (sourceNode) {
-            link.source = sourceNode;
-          }
-        }
-        if (typeof link.target === 'string') {
-          const targetNode = this.nodeMap.get(link.target);
-          if (targetNode) {
-            link.target = targetNode;
-          }
-        }
-      }
-    } catch (error) {
-      ErrorHandler.logError(error as Error);
-    }
-  }
 
   /**
    * Get simulation instance
@@ -267,10 +294,10 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
     const effectiveAlpha =
       alphaTarget ??
       (
-        nodeCount > 10000 ? 0.005 :
-        nodeCount > 5000  ? 0.01 :
-        nodeCount > 2000  ? 0.02 :
-        0.1
+        nodeCount > 10000 ? 0.03 :
+        nodeCount > 5000  ? 0.05 :
+        nodeCount > 2000  ? 0.08 :
+        0.15
       );
 
     try {
@@ -371,8 +398,8 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
         linkForce.distance((link: V2Link) => {
 
           // Get actual node radii dynamically
-          const sourceNode = typeof link.source === 'string' ? this.nodeMap.get(link.source) : link.source;
-          const targetNode = typeof link.target === 'string' ? this.nodeMap.get(link.target) : link.target;
+          const sourceNode = typeof link.source === 'string' ? this.stateManager.getNode(link.source) : link.source;
+          const targetNode = typeof link.target === 'string' ? this.stateManager.getNode(link.target) : link.target;
           const sourceRadius = sourceNode?.style?.radius ?? 20;
           const targetRadius = targetNode?.style?.radius ?? 20;
           const arrowLength = this.getLinkArrowLength(link);
@@ -394,14 +421,17 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
    * Calculate base distance based on graph size and node count
    */
   private calculateBaseDistance(): number {
-    if (!this.config) return 120;
+    if (!this.config) return 150;
 
     const nodeCount = this.config.nodes.length;
     const graphArea = Math.max(this.config.width * this.config.height, 1);
     const nodeAreaRatio = nodeCount / (graphArea / 10000); // Normalize per 10k pixels
 
-    // Adaptive base distance: more nodes = need more space
-    return Math.max(80, Math.min(200, 120 + nodeAreaRatio * 20));
+    // Improved base distance calculation for better spread
+    const baseDistance = nodeCount > 10000 ? 300 : nodeCount > 6000 ? 250 : nodeCount > 2000 ? 200 : 150;
+    const areaAdjustment = Math.min(100, nodeAreaRatio * 30);
+
+    return Math.max(baseDistance, baseDistance + areaAdjustment);
   }
   /**
    * Get arrow length from link style or default
@@ -416,16 +446,47 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
   }
 
   /**
-   * Initialize node positions if not set
+   * Initialize node positions with improved distribution for smoother startup
    */
   initializePositions(): void {
     if (!this.config) return;
 
     try {
-      for (const node of this.config.nodes) {
+      const nodeCount = this.config.nodes.length;
+      const centerX = this.config.width / 2;
+      const centerY = this.config.height / 2;
+
+      // Use circular/spiral layout for better initial distribution
+      const radius = Math.min(this.config.width, this.config.height) * 0.3;
+
+      for (let i = 0; i < this.config.nodes.length; i++) {
+        const node = this.config.nodes[i];
+        if (!node) continue;
+
         if (node.x == null || node.y == null) {
-          node.x = Math.random() * this.config.width;
-          node.y = Math.random() * this.config.height;
+          if (nodeCount === 1) {
+            // Single node at center
+            node.x = centerX;
+            node.y = centerY;
+          } else if (nodeCount <= 10) {
+            // Small graphs: circular layout
+            const angle = (i / nodeCount) * 2 * Math.PI;
+            node.x = centerX + Math.cos(angle) * radius * 0.5;
+            node.y = centerY + Math.sin(angle) * radius * 0.5;
+          } else if (nodeCount <= 100) {
+            // Medium graphs: spiral layout
+            const angle = i * 0.5;
+            const spiralRadius = (i / nodeCount) * radius;
+            node.x = centerX + Math.cos(angle) * spiralRadius;
+            node.y = centerY + Math.sin(angle) * spiralRadius;
+          } else {
+            // Large graphs: clustered random with reduced initial spread
+            const clusterRadius = radius * 0.6;
+            const angle = Math.random() * 2 * Math.PI;
+            const distance = Math.random() * clusterRadius;
+            node.x = centerX + Math.cos(angle) * distance;
+            node.y = centerY + Math.sin(angle) * distance;
+          }
         }
       }
     } catch (error) {
@@ -499,9 +560,9 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
     const nodeCount = this.config?.nodes.length ?? 0;
 
     const alpha =
-      nodeCount > 10000 ? 0.01 :
-      nodeCount > 5000 ? 0.02 :
-      nodeCount > 2000 ? 0.05 :
+      nodeCount > 10000 ? 0.05 :
+      nodeCount > 5000 ? 0.08 :
+      nodeCount > 2000 ? 0.12 :
       0.3;
 
     this.simulation
@@ -518,6 +579,10 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
       this.pause();
     } else {
       this.resume();
+      // Reset initial auto-fitview if simulation was paused early (allows fitview after tab switch)
+      if (this.hasInitialAutoFitCompleted && this.simulation && this.simulation.alpha() > 0) {
+        this.hasInitialAutoFitCompleted = false;
+      }
     }
   };
 
@@ -539,10 +604,12 @@ this.simulation = d3ForceSimulation<V2Node>(config.nodes)
       }
 
       this.config = undefined;
-      this.nodeMap.clear();
+      this.stateManager.destroy();
       this.simulationStartTime = undefined;
       this.simulationEndTime = undefined;
       this.hasInitialAutoFitCompleted = false;
+      this.isWarmingUp = false;
+      this.warmupSteps = 0;
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }

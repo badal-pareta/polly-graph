@@ -144,6 +144,7 @@ export class V2Graph implements V2Instance {
         // pointerManager: this.pointerManager,
         physicsManager: this.physicsManager,
         hoverManager: this.hoverManager,
+        renderer: this.renderer, // Pass renderer for drag state management
         onRender: () => this.renderer.renderWithTransform()
       });
 
@@ -153,7 +154,15 @@ export class V2Graph implements V2Instance {
       this.zoomManager.initialize({
         canvas: canvasState.canvas,
         canvasManager: this.canvasManager,
-        onRender: () => this.renderer.renderWithTransform(),
+        renderer: this.renderer, // Pass renderer for zoom state management
+        onRender: () => {
+          // RAF-throttled rendering during zoom for smooth visual feedback
+          this.renderer.renderWithTransform();
+        },
+        onZoomEnd: () => {
+          // Ensure final render when zoom ends (redundant but ensures clean state)
+          this.renderer.renderWithTransform();
+        },
         isOverEntity: () => {
           // Check if hover manager has an entity under pointer
           const hoverState = this.hoverManager.getHoverState();

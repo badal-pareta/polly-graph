@@ -32,6 +32,7 @@ export interface DragConfig {
   physicsManager: PhysicsManager;
   hoverManager: HoverManager;
   onRender: () => void;
+  renderer?: { setDragState(isDragging: boolean): void; setDraggedNode(node: V2Node): void };
 }
 
 export interface DragState {
@@ -47,6 +48,10 @@ export class DragManager {
   };
 
   private readonly DRAG_CLICK_TOLERANCE_PX = 3; // Force-graph constant
+
+  // RAF throttling for smooth drag performance
+  private dragRenderPending = false;
+  private lastDragRenderTime = 0;
 
   /**
    * Initialize drag behavior
@@ -115,6 +120,12 @@ export class DragManager {
       // Add drag cursor
       this.config.canvas.classList.add('grabbable');
 
+      // Set dragged node for optimization (like ZoomManager pattern)
+      if (this.config.renderer) {
+        this.config.renderer.setDraggedNode(obj);
+        this.config.renderer.setDragState(true);
+      }
+
     } catch (error) {
       ErrorHandler.logError(error as Error, {
         nodeId: obj?.id,
@@ -160,8 +171,8 @@ export class DragManager {
       this.state.isPointerDragging = true;
       obj.__dragged = true;
 
-      // Re-render during drag
-      this.config.onRender();
+      // RAF-throttled re-render during drag (like ZoomManager)
+      this.throttledDragRender();
 
     } catch (error) {
       ErrorHandler.logError(error as Error, {
@@ -169,6 +180,30 @@ export class DragManager {
         dragPosition: { x: event.x, y: event.y }
       });
     }
+  }
+
+  /**
+   * RAF-throttled render during drag (like ZoomManager pattern)
+   */
+  private throttledDragRender(): void {
+    if (!this.config) return;
+
+    // Only render if enough time has passed (16ms = ~60fps)
+    const now = performance.now();
+    if (now - this.lastDragRenderTime < 16) return;
+
+    // RAF throttling for smooth performance
+    if (this.dragRenderPending) return;
+
+    this.dragRenderPending = true;
+    requestAnimationFrame(() => {
+      this.dragRenderPending = false;
+      this.lastDragRenderTime = performance.now();
+
+      if (this.config && this.state.isPointerDragging) {
+        this.config.onRender();
+      }
+    });
   }
 
   /**
@@ -201,6 +236,11 @@ export class DragManager {
       // Reset dragging state
       this.state.isDragging = false;
       this.state.isPointerDragging = false;
+
+      // End drag optimization (like ZoomManager pattern)
+      if (this.config.renderer) {
+        this.config.renderer.setDragState(false);
+      }
 
       // Final render if node was dragged
       if (obj.__dragged) {

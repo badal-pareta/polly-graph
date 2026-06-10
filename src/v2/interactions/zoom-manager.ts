@@ -15,6 +15,8 @@ export interface ZoomConfig {
   canvas: HTMLCanvasElement;
   canvasManager: CanvasManager;
   onRender: () => void;
+  onZoomEnd?: () => void; // Function to call when zoom ends (for optimized rendering)
+  renderer?: { setZoomState(isZooming: boolean): void }; // Renderer to update zoom state
   minZoom?: number;
   maxZoom?: number;
   isOverEntity?: () => boolean; // Function to check if mouse is over an entity
@@ -25,19 +27,20 @@ type CanvasZoomEvent = D3ZoomEvent<HTMLCanvasElement, unknown>;
 export class ZoomManager {
   private config?: ZoomConfig;
   private zoomBehavior?: ZoomBehavior<HTMLCanvasElement, unknown>;
+  private isZooming = false;
+  private zoomRenderPending = false;
+  private isProgrammaticZoom = false; // Flag for programmatic zoom operations
 
   /**
    * Initialize zoom behavior
    */
-  initialize(config: ZoomConfig): void {
+  public initialize(config: ZoomConfig): void {
     try {
       this.config = config;
 
-      // Create D3 zoom behavior (force-graph pattern)
       this.zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>();
       const zoomBaseElem = d3Select(config.canvas);
 
-      // Attach zoom to canvas
       this.zoomBehavior(zoomBaseElem);
 
       // Disable double-click to zoom (force-graph pattern)
@@ -55,7 +58,6 @@ export class ZoomManager {
           if (event.button) return false;
 
           // // Don't pan if mouse is over an entity (let selection/hover handle it)
-          // if (config.isOverEntity && config.isOverEntity()) return false;
 
           if (config.isOverEntity && config.isOverEntity() && event.type !== 'wheel') {
             return false;
@@ -101,6 +103,7 @@ export class ZoomManager {
    * Handle zoom start (when panning begins)
    */
   private handleZoomStart(event: CanvasZoomEvent): void {
+    this.isZooming = true;
     if (!this.config) return;
 
     try {
@@ -108,44 +111,53 @@ export class ZoomManager {
       event.sourceEvent?.stopPropagation();
       event.sourceEvent?.preventDefault();
 
-      // Change cursor to grabbing when panning starts
-      this.config.canvas.style.cursor = 'grabbing';
+      // Only enable fast zoom for user-initiated zoom, not programmatic
+      if (this.config.renderer && !this.isProgrammaticZoom) {
+        this.config.renderer.setZoomState(true);
+      }
+
+      // Change cursor to grabbing when panning starts (only for user zoom)
+      if (!this.isProgrammaticZoom) {
+        this.config.canvas.style.cursor = 'grabbing';
+      }
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }
   }
 
   /**
-   * Handle zoom events
+   * Handle zoom events with RAF throttling for smooth performance
    */
   private handleZoom(event: CanvasZoomEvent): void {
     if (!this.config) return;
 
-    try {
-      // Stop event propagation
-      event.sourceEvent?.stopPropagation();
-      event.sourceEvent?.preventDefault();
+    event.sourceEvent?.stopPropagation();
+    event.sourceEvent?.preventDefault();
 
-      const transform = event.transform;
-
-      // Apply transform to canvases
-      this.config.canvasManager.clear();
-      this.config.canvasManager.applyTransform(transform);
-
-      // Re-render with new transform
-      this.config.onRender();
-
-    } catch (error) {
-      ErrorHandler.logError(error as Error, {
-        transform: event.transform
-      });
+    // RAF throttling: Only render once per animation frame for smooth zoom
+    if (this.zoomRenderPending) {
+      return;
     }
+
+    this.zoomRenderPending = true;
+
+    requestAnimationFrame(() => {
+      this.zoomRenderPending = false;
+
+      if (!this.config) {
+        return;
+      }
+
+      // Render during zoom for visual feedback, throttled to 60fps max
+      this.config.onRender();
+    });
   }
 
   /**
    * Handle zoom end (when panning ends)
    */
   private handleZoomEnd(event: CanvasZoomEvent): void {
+    this.isZooming = false;
     if (!this.config) return;
 
     try {
@@ -153,15 +165,34 @@ export class ZoomManager {
       event.sourceEvent?.stopPropagation();
       event.sourceEvent?.preventDefault();
 
-      // Only reset cursor to grab if we're not hovering over an entity
-      // The hover manager will handle cursor when over entities
-      const currentCursor = this.config.canvas.style.cursor;
-      if (currentCursor === 'grabbing') {
-        this.config.canvas.style.cursor = 'grab';
+      // Update renderer zoom state for performance optimization (only for user zoom)
+      if (this.config.renderer && !this.isProgrammaticZoom) {
+        this.config.renderer.setZoomState(false);
       }
+
+      // Only reset cursor to grab if we're not hovering over an entity (only for user zoom)
+      // The hover manager will handle cursor when over entities
+      if (!this.isProgrammaticZoom) {
+        const currentCursor = this.config.canvas.style.cursor;
+        if (currentCursor === 'grabbing') {
+          this.config.canvas.style.cursor = 'grab';
+        }
+      }
+
+      // Trigger optimized render on zoom end
+      if (this.config.onZoomEnd) {
+        this.config.onZoomEnd();
+      }
+
+      // Reset programmatic zoom flag
+      this.isProgrammaticZoom = false;
     } catch (error) {
       ErrorHandler.logError(error as Error);
     }
+  }
+
+  isCurrentlyZooming(): boolean {
+    return this.isZooming;
   }
 
   /**
@@ -199,6 +230,8 @@ export class ZoomManager {
     if (!this.config?.canvas || !this.zoomBehavior) return;
 
     try {
+      // Mark as programmatic zoom to prevent fast zoom mode
+      this.isProgrammaticZoom = true;
       const canvas = this.config.canvas;
 
       if (center) {
@@ -235,6 +268,8 @@ export class ZoomManager {
     if (!this.config?.canvas || !this.zoomBehavior) return;
 
     try {
+      // Mark as programmatic zoom to prevent fast zoom mode
+      this.isProgrammaticZoom = true;
       // Get canvas dimensions
       const canvasDims = this.config.canvasManager.getDimensions();
 
@@ -258,6 +293,8 @@ export class ZoomManager {
     if (!this.config?.canvas || !this.zoomBehavior) return;
 
     try {
+      // Mark as programmatic zoom to prevent fast zoom mode
+      this.isProgrammaticZoom = true;
       const selection = d3Select(this.config.canvas);
 
       // Create proper ZoomTransform from object
@@ -288,6 +325,8 @@ export class ZoomManager {
       }
 
     try {
+      // Mark as programmatic zoom to prevent fast zoom mode
+      this.isProgrammaticZoom = true;
       const canvas = this.config.canvas;
       const transitionDuration = 750;
 
