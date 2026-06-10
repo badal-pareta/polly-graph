@@ -16,28 +16,18 @@ import {
   forceCollide
 } from 'd3-force';
 
-import { V2Node, V2Link } from '../types';
+import { V2Node, V2Link, PhysicsConfig } from '../types';
 import { ErrorHandler, ValidationError, TimerManager } from '../utils';
-
-export interface PhysicsConfig {
-  nodes: V2Node[];
-  links: V2Link[];
-  width: number;
-  height: number;
-  onTick: () => void;
-  onEnd?: () => void;
-  autoFitView?: boolean;
-  cooldownTime?: number;
-}
 
 export class PhysicsManager {
   private simulation?: Simulation<V2Node, V2Link>;
   private config?: PhysicsConfig;
   private simulationStartTime?: number;
   private simulationEndTime?: number;
-  private cooldownTimer?: number;
   private hasInitialAutoFitCompleted = false;
   private timerManager: TimerManager;
+  private isVisibilityListenerAttached = false;
+  private nodeMap = new Map<string, V2Node>();
 
   constructor(timerManager: TimerManager) {
     this.timerManager = timerManager;
@@ -54,22 +44,21 @@ export class PhysicsManager {
       if (typeof config.onTick !== 'function') {
         throw new ValidationError('onTick callback is required and must be a function');
       }
-
+      if (!this.isVisibilityListenerAttached) {
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
+        this.isVisibilityListenerAttached = true;
+      }
       this.config = config;
       this.simulationStartTime = performance.now();
 
       // Calculate adaptive force strengths based on node count and graph density
       const nodeCount = config.nodes.length;
       // const linkCount = config.links.length;
-      const graphArea = config.width * config.height;
-
-      // Adaptive charge strength: reduce repulsion for dense graphs
-      // const baseChargeStrength = -600; // Reduced base from -800
+      const graphArea = Math.max(config.width * config.height, 1);
 
       // Calculate true density: nodes per unit area (normalized to 100k pixel units)
       const nodeDensity = nodeCount / (graphArea / 100000); // Nodes per 100k pixels
       const densityFactor = Math.min(nodeDensity, 2); // Cap at 2x adjustment
-      // const adaptiveChargeStrength = baseChargeStrength / (1 + densityFactor * 0.4);
 
       // Adaptive velocity decay: faster settling for dense graphs
       const baseVelocityDecay = 0.4;
@@ -79,45 +68,85 @@ export class PhysicsManager {
       const baseAlphaDecay = 0.02;
       const adaptiveAlphaDecay = Math.min(baseAlphaDecay + (densityFactor * 0.01), 0.05);
 
-      // Debug logging for adaptive physics (can be removed in production)
-      // console.log('🔬 Adaptive Physics:', {
-      //   nodeCount,
-      //   linkCount,
-      //   graphArea: Math.round(graphArea),
-      //   nodeDensity: nodeDensity.toFixed(3),
-      //   densityFactor: densityFactor.toFixed(2),
-      //   chargeStrength: adaptiveChargeStrength.toFixed(0),
-      //   velocityDecay: adaptiveVelocityDecay.toFixed(2),
-      //   alphaDecay: adaptiveAlphaDecay.toFixed(3),
-      //   maxDistance: Math.max(300, 600 - densityFactor * 100)
-      // });
+      if (this.simulation) { this.simulation.stop(); }
+      this.buildNodeIndex();
 
       // Create D3 force simulation with adaptive parameters
-      this.simulation = d3ForceSimulation<V2Node>(config.nodes)
-        .force('link', d3ForceLink<V2Node, V2Link>(config.links)
-          .id((d: V2Node) => d.id)
-          .distance(150) // Increase default link distance for better spacing
-          .strength(0.4) // Much weaker link strength to allow repulsion to work
-        )
-        .force('charge', d3ForceManyBody()
-          .strength(-500) // Adaptive repulsion strength
-          // .distanceMin(1) // Minimum distance for repulsion
-          // .distanceMax(Math.max(300, 600 - densityFactor * 100)) // Reduce max distance for dense graphs
-        )
-        .force('collision', forceCollide<V2Node>()
-          .radius(node => this.getNodeRadius(node) + 2)
-          .strength(1)
-        )
-        .force('center', d3ForceCenter(0, 0)
-          .strength(.5) // Center around origin like force-graph
-        )
-        // .force('x', forceX(0).strength(0.05))
-        // .force('y', forceY(0).strength(0.05))
-        .velocityDecay(adaptiveVelocityDecay) // Adaptive velocity decay for faster settling
-        .alphaDecay(adaptiveAlphaDecay) // Adaptive alpha decay for better convergence
-        .on('tick', config.onTick)
-        .on('end', () => this.handleSimulationEnd());
+const linkDistance =
+  nodeCount > 10000 ? 220 :
+  nodeCount > 5000 ? 190 :
+  nodeCount > 2000 ? 170 :
+  150;
 
+const chargeStrength =
+  nodeCount > 10000 ? -350 :
+  nodeCount > 5000 ? -400 :
+  nodeCount > 2000 ? -450 :
+  -500;
+
+const collisionRadius =
+  nodeCount > 10000 ? 1 :
+  nodeCount > 5000 ? 2 :
+  2;
+
+const collisionIterations =
+  nodeCount > 10000 ? 1 :
+  nodeCount > 5000 ? 1 :
+  2;
+
+const centerStrength =
+  nodeCount > 5000 ? 0.15 : 0.5;
+
+const linkStrength =
+  nodeCount > 10000 ? 0.15 :
+  nodeCount > 5000 ? 0.25 :
+  0.4;
+
+this.simulation = d3ForceSimulation<V2Node>(config.nodes)
+  .force(
+    'link',
+    d3ForceLink<V2Node, V2Link>(config.links)
+      .id((d: V2Node) => d.id)
+      .distance(linkDistance)
+      .strength(linkStrength)
+      .iterations(1)
+  )
+  .force(
+    'charge',
+    d3ForceManyBody<V2Node>()
+      .strength(chargeStrength)
+      .theta(nodeCount > 5000 ? 1.2 : 0.9)
+      .distanceMax(nodeCount > 5000 ? 500 : 1000)
+  )
+  .force(
+    'collision',
+    forceCollide<V2Node>()
+      .radius(node => (node.style?.radius ?? 20) + collisionRadius)
+      .strength(1)
+      .iterations(collisionIterations)
+  )
+  .force(
+    'center',
+    d3ForceCenter(0, 0)
+      .strength(centerStrength)
+  )
+  .velocityDecay(
+    nodeCount > 5000
+      ? 0.65
+      : adaptiveVelocityDecay
+  )
+  .alphaDecay(
+    nodeCount > 5000
+      ? 0.05
+      : adaptiveAlphaDecay
+  )
+  .alphaMin(
+    nodeCount > 5000
+      ? 0.05
+      : 0.001
+  )
+  .on('tick', config.onTick)
+  .on('end', () => this.handleSimulationEnd());
       // Setup cooldown timer if specified
       if (config.cooldownTime) {
         this.setupCooldownTimer(config.cooldownTime);
@@ -182,6 +211,42 @@ export class PhysicsManager {
   }
 
   /**
+   * Build node index for O(1) lookups (Step 3 optimization)
+   */
+  private buildNodeIndex(): void {
+    if (!this.config) return;
+
+    try {
+      // Clear existing index
+      this.nodeMap.clear();
+
+      // Build node index for fast lookups
+      for (const node of this.config.nodes) {
+        this.nodeMap.set(node.id, node);
+      }
+
+      // Pre-resolve link references for O(1) access
+      for (const link of this.config.links) {
+        // Convert string source/target to node objects if needed
+        if (typeof link.source === 'string') {
+          const sourceNode = this.nodeMap.get(link.source);
+          if (sourceNode) {
+            link.source = sourceNode;
+          }
+        }
+        if (typeof link.target === 'string') {
+          const targetNode = this.nodeMap.get(link.target);
+          if (targetNode) {
+            link.target = targetNode;
+          }
+        }
+      }
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+    }
+  }
+
+  /**
    * Get simulation instance
    */
   getSimulation(): Simulation<V2Node, V2Link> {
@@ -194,14 +259,24 @@ export class PhysicsManager {
   /**
    * Reheat simulation for drag interactions
    */
-  reheat(alphaTarget: number = 0.3): void {
-    if (!this.simulation) return;
+  reheat(alphaTarget?: number): void {
+    if (!this.simulation || !this.config) { return; }
+
+    const nodeCount = this.config.nodes.length;
+
+    const effectiveAlpha =
+      alphaTarget ??
+      (
+        nodeCount > 10000 ? 0.005 :
+        nodeCount > 5000  ? 0.01 :
+        nodeCount > 2000  ? 0.02 :
+        0.1
+      );
 
     try {
-      this.simulation.alphaTarget(alphaTarget).restart();
+      this.simulation.alphaTarget(effectiveAlpha).restart();
 
-      // Restart cooldown timer
-      if (this.config?.cooldownTime) {
+      if (this.config.cooldownTime) {
         this.setupCooldownTimer(this.config.cooldownTime);
       }
     } catch (error) {
@@ -288,28 +363,24 @@ export class PhysicsManager {
     if (!this.simulation || !this.config) return;
 
     try {
+      // Dynamic base distance calculation
+      const baseDistance = this.calculateBaseDistance();
       // Calculate distance function that accounts for node radii + arrow lengths
       const linkForce = this.simulation.force('link') as ForceLink<V2Node, V2Link> | undefined;
       if (linkForce) {
         linkForce.distance((link: V2Link) => {
-          // Dynamic base distance calculation
-          const baseDistance = this.calculateBaseDistance();
 
           // Get actual node radii dynamically
-          const sourceNode = this.findNodeById(typeof link.source === 'string' ? link.source : link.source.id);
-          const targetNode = this.findNodeById(typeof link.target === 'string' ? link.target : link.target.id);
-
-          const sourceRadius = this.getNodeRadius(sourceNode);
-          const targetRadius = this.getNodeRadius(targetNode);
+          const sourceNode = typeof link.source === 'string' ? this.nodeMap.get(link.source) : link.source;
+          const targetNode = typeof link.target === 'string' ? this.nodeMap.get(link.target) : link.target;
+          const sourceRadius = sourceNode?.style?.radius ?? 20;
+          const targetRadius = targetNode?.style?.radius ?? 20;
           const arrowLength = this.getLinkArrowLength(link);
 
           // Calculate visual compensation based on actual values
           const visualCompensation = sourceRadius + targetRadius + arrowLength;
           const spacingBuffer = Math.max(20, (sourceRadius + targetRadius) * 0.5);
           const totalDistance = baseDistance + visualCompensation + spacingBuffer;
-
-          // Debug logging can be enabled here if needed for troubleshooting
-          // console.log('🔗 Link Distance Debug:', { totalDistance });
 
           return totalDistance;
         });
@@ -326,28 +397,12 @@ export class PhysicsManager {
     if (!this.config) return 120;
 
     const nodeCount = this.config.nodes.length;
-    const graphArea = this.config.width * this.config.height;
+    const graphArea = Math.max(this.config.width * this.config.height, 1);
     const nodeAreaRatio = nodeCount / (graphArea / 10000); // Normalize per 10k pixels
 
     // Adaptive base distance: more nodes = need more space
     return Math.max(80, Math.min(200, 120 + nodeAreaRatio * 20));
   }
-
-  /**
-   * Find node by ID
-   */
-  private findNodeById(id: string): V2Node | undefined {
-    return this.config?.nodes.find(node => node.id === id);
-  }
-
-  /**
-   * Get node radius from style or default
-   */
-  private getNodeRadius(node: V2Node | undefined): number {
-    if (!node) return 20; // Default radius
-    return node.style?.radius ?? 20; // Default to 20 (KG component default)
-  }
-
   /**
    * Get arrow length from link style or default
    */
@@ -368,7 +423,7 @@ export class PhysicsManager {
 
     try {
       for (const node of this.config.nodes) {
-        if (!node.x || !node.y) {
+        if (node.x == null || node.y == null) {
           node.x = Math.random() * this.config.width;
           node.y = Math.random() * this.config.height;
         }
@@ -429,20 +484,42 @@ export class PhysicsManager {
   /**
    * Pause the simulation
    */
-  pause(): void {
-    if (this.simulation) {
-      this.simulation.stop();
-    }
+  public pause(): void {
+    if (!this.simulation) { return; }
+
+    this.timerManager.clearTimer('simulationCooldown');
+    this.simulation.stop();
   }
 
   /**
    * Resume the simulation
    */
   resume(): void {
-    if (this.simulation) {
-      this.simulation.restart();
+    if (!this.simulation) { return; }
+    const nodeCount = this.config?.nodes.length ?? 0;
+
+    const alpha =
+      nodeCount > 10000 ? 0.01 :
+      nodeCount > 5000 ? 0.02 :
+      nodeCount > 2000 ? 0.05 :
+      0.3;
+
+    this.simulation
+      .alpha(alpha)
+      .alphaTarget(0)
+      .restart();
+    if (this.config?.cooldownTime) {
+      this.setupCooldownTimer(this.config.cooldownTime);
     }
   }
+
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState !== 'visible') {
+      this.pause();
+    } else {
+      this.resume();
+    }
+  };
 
   /**
    * Destroy physics simulation
@@ -450,8 +527,11 @@ export class PhysicsManager {
   destroy(): void {
     try {
       // Clear cooldown timer using TimerManager
+      if (this.isVisibilityListenerAttached) {
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        this.isVisibilityListenerAttached = false;
+      }
       this.timerManager.clearTimer('simulationCooldown');
-      this.cooldownTimer = undefined;
 
       if (this.simulation) {
         this.simulation.stop();
@@ -459,6 +539,7 @@ export class PhysicsManager {
       }
 
       this.config = undefined;
+      this.nodeMap.clear();
       this.simulationStartTime = undefined;
       this.simulationEndTime = undefined;
       this.hasInitialAutoFitCompleted = false;

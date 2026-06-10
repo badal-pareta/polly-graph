@@ -107,7 +107,7 @@ export class DragManager {
 
       // Reheat simulation and fix node position
       if (!event.active) {
-        this.config.physicsManager.reheat(0.3);
+        this.config.physicsManager.reheat();
         obj.fx = obj.x;
         obj.fy = obj.y;
       }

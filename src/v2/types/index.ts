@@ -4,3 +4,4 @@
 
 export * from './graph.types';
 export * from './render-styles';
+export * from './physics.types';

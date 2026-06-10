@@ -30,9 +30,10 @@
   justify-content: center;
   cursor: pointer;
   transition: background 120ms ease;
+  overflow: hidden;
 }
 
-.pg-control-btn:hover { background: #f9fafb; }
+.pg-control-btn:hover { background: #f9fafb; border-radius: 12px; }
 
 .pg-orient-vertical .pg-control-btn:not(:last-child) { border-bottom: 1px solid rgba(0,0,0,0.06); }
 .pg-orient-horizontal .pg-control-btn:not(:last-child) { border-right: 1px solid rgba(0,0,0,0.06); }
