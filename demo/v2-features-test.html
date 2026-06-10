@@ -154,8 +154,8 @@
     <div class="header">
       <div class="title">V2 Canvas Features Test</div>
       <div class="description">
-        Testing advanced V2 features including link labels, hover interactions,
-        configurable visibility modes, and canvas-based rendering performance.
+        Testing advanced V2 features including link labels, hover interactions, node highlighting,
+        configurable visibility modes, and high-performance canvas-based rendering.
       </div>
     </div>
 
@@ -177,6 +177,8 @@
 
       <!-- Advanced Features -->
       <button onclick="testHoverEffects()" class="feature-btn">✨ Hover Effects</button>
+      <button onclick="testHighlighting()" class="feature-btn">🟡 Node Highlighting</button>
+      <button onclick="clearHighlights()" class="feature-btn">🚫 Clear Highlights</button>
       <button onclick="testPhysicsDemo()" class="feature-btn">⚡ Physics Demo</button>
 
       <!-- Utilities -->
@@ -220,6 +222,15 @@
           trigger link hover/selection. Shadow canvas integration.
         </div>
         <button onclick="testHitDetection()" class="feature-btn" style="width: 100%;">Test Hit Detection</button>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-title">🟡 Node Highlighting</div>
+        <div class="feature-description">
+          Dynamically highlight nodes with customizable styles. Search API allows
+          highlighting by node IDs with precedence: Default → Hover → Highlight → Selected.
+        </div>
+        <button onclick="testHighlighting()" class="feature-btn" style="width: 100%;">Test Highlighting</button>
       </div>
     </div>
 

@@ -49,7 +49,42 @@ export function testBasicGraph(): void {
     ]
   };
 
-  renderGraph(data, 'Basic graph with 4 nodes');
+  // Create graph with basic highlighting configuration
+  const config: V2Config = {
+    container: document.getElementById('graph-container')!,
+    nodes: data.nodes,
+    links: data.links,
+    width: 800,
+    height: 600,
+    backgroundColor: '#ffffff',
+    interaction: {
+      highlight: {
+        nodeStyle: {
+          fill: '#fbbf24',        // Amber highlight
+          stroke: '#f59e0b',      // Darker amber border
+          strokeWidth: 2,
+          opacity: 1.0
+        }
+      }
+    },
+    controls: {
+      enabled: true,
+      position: 'bottom-right',
+      orientation: 'vertical'
+    }
+  };
+
+  currentGraph = createV2Graph(config);
+  currentGraph.render();
+
+  // Demonstrate highlighting by highlighting Node 2
+  setTimeout(() => {
+    if (currentGraph) {
+      currentGraph.highlightNode('2');
+      showStatus('✅ Basic graph with 4 nodes (Node 2 highlighted)', 'success');
+      updateStats(`4 nodes, 4 links, 0 labels`);
+    }
+  }, 500);
 }
 
 // Test link labels with different configurations
@@ -295,6 +330,189 @@ export function testCustomLabelStyles(): void {
   renderGraph(data, 'Custom label styles - colors, borders, shapes');
 }
 
+// Test node highlighting functionality
+export function testHighlighting(): void {
+  clearGraph();
+
+  const data: TestData = {
+    nodes: [
+      {
+        id: 'search-node-1',
+        entityType: 'Node',
+        type: 'SearchResult',
+        label: 'Found Node 1',
+        tooltip: 'This node will be highlighted in amber',
+        x: 200,
+        y: 200,
+        style: { fill: '#3b82f6', radius: 20 }
+      },
+      {
+        id: 'normal-node-1',
+        entityType: 'Node',
+        type: 'Normal',
+        label: 'Normal Node',
+        tooltip: 'This node stays normal (hover to see precedence)',
+        x: 400,
+        y: 150,
+        style: { fill: '#6b7280', radius: 18 }
+      },
+      {
+        id: 'search-node-2',
+        entityType: 'Node',
+        type: 'SearchResult',
+        label: 'Found Node 2',
+        tooltip: 'This node will also be highlighted',
+        x: 600,
+        y: 200,
+        style: { fill: '#10b981', radius: 20 }
+      },
+      {
+        id: 'normal-node-2',
+        entityType: 'Node',
+        type: 'Normal',
+        label: 'Another Normal',
+        tooltip: 'Click to select (selection beats highlighting)',
+        x: 400,
+        y: 350,
+        style: { fill: '#8b5cf6', radius: 18 }
+      },
+      {
+        id: 'search-node-3',
+        entityType: 'Node',
+        type: 'SearchResult',
+        label: 'Found Node 3',
+        tooltip: 'Third highlighted node',
+        x: 300,
+        y: 300,
+        style: { fill: '#ef4444', radius: 20 }
+      }
+    ],
+    links: [
+      {
+        source: 'search-node-1',
+        target: 'normal-node-1',
+        entityType: 'Link',
+        label: 'connects'
+      },
+      {
+        source: 'normal-node-1',
+        target: 'search-node-2',
+        entityType: 'Link',
+        label: 'flows to'
+      },
+      {
+        source: 'search-node-2',
+        target: 'normal-node-2',
+        entityType: 'Link',
+        label: 'relates to'
+      },
+      {
+        source: 'normal-node-2',
+        target: 'search-node-3',
+        entityType: 'Link',
+        label: 'links to'
+      },
+      {
+        source: 'search-node-3',
+        target: 'search-node-1',
+        entityType: 'Link',
+        label: 'cycles back'
+      }
+    ]
+  };
+
+  // Create graph with custom highlight configuration
+  const config: V2Config = {
+    container: document.getElementById('graph-container')!,
+    nodes: data.nodes,
+    links: data.links,
+    width: 800,
+    height: 600,
+    backgroundColor: '#ffffff',
+    interaction: {
+      hover: {
+        enabled: true,
+        nodeStyle: {
+          stroke: '#1f2937',
+          strokeWidth: 3,
+          opacity: 1.0
+        }
+      },
+      selection: {
+        enabled: true,
+        nodeStyle: {
+          stroke: '#dc2626',
+          strokeWidth: 4,
+          radius: 24
+        }
+      },
+      highlight: {
+        nodeStyle: {
+          fill: '#fbbf24',        // Amber highlight
+          stroke: '#f59e0b',      // Darker amber border
+          strokeWidth: 3,         // Highlighted border
+          opacity: 1.0
+        }
+      }
+    },
+    controls: {
+      enabled: true,
+      position: 'bottom-right',
+      orientation: 'vertical'
+    }
+  };
+
+  currentGraph = createV2Graph(config);
+  currentGraph.render();
+
+  // Simulate search results by highlighting specific nodes
+  setTimeout(() => {
+    if (currentGraph) {
+      // Highlight the "search result" nodes
+      currentGraph.highlightNodes(['search-node-1', 'search-node-2', 'search-node-3']);
+
+      showStatus('🔍 Search Results: 3 nodes highlighted in amber (try hover/select to see precedence)', 'success');
+
+      // Show demonstration of API calls after a delay
+      setTimeout(() => {
+        if (currentGraph) {
+          showStatus('✨ Removing highlight from Node 2...', 'info');
+          currentGraph.unhighlightNode('search-node-2');
+
+          setTimeout(() => {
+            if (currentGraph) {
+              showStatus('🔄 Re-highlighting all found nodes...', 'info');
+              currentGraph.highlightNode('search-node-2');
+
+              setTimeout(() => {
+                if (currentGraph) {
+                  const highlighted = currentGraph.getHighlightedNodes();
+                  showStatus(`📊 Currently highlighted: ${highlighted.size} nodes (${Array.from(highlighted).join(', ')})`, 'info');
+                }
+              }, 1500);
+            }
+          }, 1500);
+        }
+      }, 3000);
+    }
+  }, 500);
+
+  // Log interaction events to show precedence
+  if (currentGraph) {
+    currentGraph.on('nodeHover', (node: V2Node) => {
+      console.log(`[Highlight Demo] Node hover: ${node.id} (hover styling applied over highlight)`);
+    });
+
+    currentGraph.on('nodeSelect', (node: V2Node) => {
+      console.log(`[Highlight Demo] Node select: ${node.id} (selection styling takes precedence)`);
+    });
+
+    currentGraph.on('nodeDeselect', (node: V2Node) => {
+      console.log(`[Highlight Demo] Node deselect: ${node.id} (back to highlight styling if highlighted)`);
+    });
+  }
+}
+
 // Test hover effects
 export function testHoverEffects(): void {
   clearGraph();
@@ -425,7 +643,7 @@ export function testHoverEffects(): void {
     }
   };
 
-  currentGraph = createV2Graph(config) as TestGraph;
+  currentGraph = createV2Graph(config);
   currentGraph.render();
 
   showStatus('Arrow, Legend & Tooltip Test: Hover links/nodes for tooltips | Hover links (green arrows) | Select links (orange arrows) | Red arrow stays red', 'info');
@@ -681,7 +899,7 @@ function renderGraph(data: TestData, description: string): void {
         position: 'bottom-right',
         orientation: 'vertical'
       }
-    }) as TestGraph;
+    });
 
     const endTime = performance.now();
     const renderTime = Math.round(endTime - startTime);
@@ -692,6 +910,15 @@ function renderGraph(data: TestData, description: string): void {
   } catch (error) {
     console.error('[Debug] Graph render error:', error);
     showStatus(`❌ Error: ${(error as Error).message}`, 'error');
+  }
+}
+
+export function clearHighlights(): void {
+  if (currentGraph) {
+    currentGraph.clearHighlights();
+    showStatus('All highlights cleared', 'info');
+  } else {
+    showStatus('No graph loaded', 'error');
   }
 }
 
@@ -826,12 +1053,14 @@ declare global {
     testLabelVisibility: () => void;
     testCustomLabelStyles: () => void;
     testHoverEffects: () => void;
+    testHighlighting: () => void;
     testPhysicsDemo: () => void;
     testPerformanceGraph: () => void;
     testLargeGraph10K: () => void;
     testLargeGraph25K: () => void;
     testHitDetection: () => void;
     clearGraph: () => void;
+    clearHighlights: () => void;
     exportGraph: () => void;
     toggleHitDetectionVisualization: () => void;
   }
@@ -842,11 +1071,13 @@ window.testLinkLabels = testLinkLabels;
 window.testLabelVisibility = testLabelVisibility;
 window.testCustomLabelStyles = testCustomLabelStyles;
 window.testHoverEffects = testHoverEffects;
+window.testHighlighting = testHighlighting;
 window.testPhysicsDemo = testPhysicsDemo;
 window.testPerformanceGraph = testPerformanceGraph;
 window.testLargeGraph10K = testLargeGraph10K;
 window.testLargeGraph25K = testLargeGraph25K;
 window.testHitDetection = testHitDetection;
 window.clearGraph = clearGraph;
+window.clearHighlights = clearHighlights;
 window.exportGraph = exportGraph;
 window.toggleHitDetectionVisualization = toggleHitDetectionVisualization;

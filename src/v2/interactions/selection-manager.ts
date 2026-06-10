@@ -28,6 +28,9 @@ export class SelectionManager {
   private eventHandlers = new Map<string, Set<(event: SelectionEvent) => void>>();
   private container?: HTMLElement;
 
+  // Store bound handlers for proper cleanup
+  private boundHandlers = new Map<string, EventListener>();
+
   /**
    * Initialize selection manager
    */
@@ -55,17 +58,22 @@ export class SelectionManager {
   private setupSelectionListeners(): void {
     if (!this.container || !this.canvasState) return;
 
-    // Handle click events for selection
-    this.container.addEventListener('click', (event) => {
-      this.handleSelectionClick(event);
-    }, { passive: false });
+    // Handle click events for selection - store bound handler for proper cleanup
+    const clickHandler = (event: Event) => {
+      this.handleSelectionClick(event as MouseEvent);
+    };
+    this.boundHandlers.set('click', clickHandler);
+    this.container.addEventListener('click', clickHandler, { passive: false });
 
-    // Handle escape key to clear selection
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+    // Handle escape key to clear selection - store bound handler for proper cleanup
+    const keydownHandler = (event: Event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if (keyboardEvent.key === 'Escape') {
         this.clearSelection();
       }
-    });
+    };
+    this.boundHandlers.set('keydown', keydownHandler);
+    document.addEventListener('keydown', keydownHandler);
   }
 
   /**
@@ -349,16 +357,17 @@ export class SelectionManager {
    */
   destroy(): void {
     try {
-      // Remove event listeners
-      if (this.container) {
-        this.container.removeEventListener('click', this.handleSelectionClick.bind(this));
+      // Remove event listeners using stored bound handlers
+      if (this.container && this.boundHandlers.has('click')) {
+        this.container.removeEventListener('click', this.boundHandlers.get('click')!);
       }
 
-      document.removeEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          this.clearSelection();
-        }
-      });
+      if (this.boundHandlers.has('keydown')) {
+        document.removeEventListener('keydown', this.boundHandlers.get('keydown')!);
+      }
+
+      // Clear bound handlers
+      this.boundHandlers.clear();
 
       this.eventHandlers.clear();
       this.selectionState = {

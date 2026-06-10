@@ -16,6 +16,7 @@ export interface GraphState {
 export interface NodeLookupState {
   isHovered: boolean;
   isSelected: boolean;
+  isHighlighted: boolean;
 }
 
 export interface LinkLookupState {
@@ -34,6 +35,9 @@ export class StateManager {
 
   // Link ID to Link mapping for efficient lookups
   private linkIdToLinkMap = new Map<string, V2Link>();
+
+  // Highlight state tracking
+  private highlightedNodes = new Set<string>();
 
   /**
    * Initialize with graph data
@@ -236,6 +240,72 @@ export class StateManager {
   }
 
   /**
+   * Highlight a node by ID
+   */
+  highlightNode(nodeId: string): void {
+    if (this.nodeMap.has(nodeId)) {
+      this.highlightedNodes.add(nodeId);
+      this.clearSingleNodeStateCache(nodeId);
+    }
+  }
+
+  /**
+   * Highlight multiple nodes by IDs
+   */
+  highlightNodes(nodeIds: string[]): void {
+    for (const nodeId of nodeIds) {
+      if (this.nodeMap.has(nodeId)) {
+        this.highlightedNodes.add(nodeId);
+        this.clearSingleNodeStateCache(nodeId);
+      }
+    }
+  }
+
+  /**
+   * Remove highlight from a node
+   */
+  unhighlightNode(nodeId: string): void {
+    if (this.highlightedNodes.has(nodeId)) {
+      this.highlightedNodes.delete(nodeId);
+      this.clearSingleNodeStateCache(nodeId);
+    }
+  }
+
+  /**
+   * Clear all node highlights
+   */
+  clearHighlights(): void {
+    const highlightedIds = Array.from(this.highlightedNodes);
+    this.highlightedNodes.clear();
+
+    // Clear state cache for previously highlighted nodes
+    for (const nodeId of highlightedIds) {
+      this.clearSingleNodeStateCache(nodeId);
+    }
+  }
+
+  /**
+   * Check if a node is highlighted
+   */
+  isNodeHighlighted(nodeId: string): boolean {
+    return this.highlightedNodes.has(nodeId);
+  }
+
+  /**
+   * Get all highlighted node IDs
+   */
+  getHighlightedNodes(): Set<string> {
+    return new Set(this.highlightedNodes);
+  }
+
+  /**
+   * Clear state cache for a specific node
+   */
+  private clearSingleNodeStateCache(nodeId: string): void {
+    this.nodeStateCache.delete(nodeId);
+  }
+
+  /**
    * Get statistics about cached state
    */
   getStats(): {
@@ -243,12 +313,14 @@ export class StateManager {
     linkCount: number;
     cachedNodeStates: number;
     cachedLinkStates: number;
+    highlightedNodes: number;
   } {
     return {
       nodeCount: this.nodeMap.size,
       linkCount: this.linkMap.size,
       cachedNodeStates: this.nodeStateCache.size,
-      cachedLinkStates: this.linkStateCache.size
+      cachedLinkStates: this.linkStateCache.size,
+      highlightedNodes: this.highlightedNodes.size
     };
   }
 
@@ -261,5 +333,6 @@ export class StateManager {
     this.linkIdToLinkMap.clear();
     this.nodeStateCache.clear();
     this.linkStateCache.clear();
+    this.highlightedNodes.clear();
   }
 }

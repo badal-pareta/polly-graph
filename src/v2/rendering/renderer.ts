@@ -513,8 +513,8 @@ export class Renderer {
   private renderNodesLayer(ctx: CanvasRenderingContext2D, nodes: V2Node[]): void {
     if (!this.config || !this.styleResolver) return;
 
-    // Simple performance fix: Cache node state lookups
-    const nodeStateCache = new Map<string, { isHovered: boolean; isSelected: boolean }>();
+    // Simple performance fix: Cache node state lookups including highlight state
+    const nodeStateCache = new Map<string, { isHovered: boolean; isSelected: boolean; isHighlighted: boolean }>();
 
     NodesRenderer.renderWithStyleResolver(
       ctx,
@@ -523,7 +523,12 @@ export class Renderer {
       (nodeId) => {
         let nodeState = nodeStateCache.get(nodeId);
         if (!nodeState) {
-          nodeState = this.interactionResolver.getNodeState(nodeId);
+          const interactionState = this.interactionResolver.getNodeState(nodeId);
+          nodeState = {
+            isHovered: interactionState.isHovered,
+            isSelected: interactionState.isSelected,
+            isHighlighted: this.stateManager.isNodeHighlighted(nodeId)
+          };
           nodeStateCache.set(nodeId, nodeState);
         }
         return nodeState.isHovered;
@@ -531,10 +536,28 @@ export class Renderer {
       (nodeId) => {
         let nodeState = nodeStateCache.get(nodeId);
         if (!nodeState) {
-          nodeState = this.interactionResolver.getNodeState(nodeId);
+          const interactionState = this.interactionResolver.getNodeState(nodeId);
+          nodeState = {
+            isHovered: interactionState.isHovered,
+            isSelected: interactionState.isSelected,
+            isHighlighted: this.stateManager.isNodeHighlighted(nodeId)
+          };
           nodeStateCache.set(nodeId, nodeState);
         }
         return nodeState.isSelected;
+      },
+      (nodeId) => {
+        let nodeState = nodeStateCache.get(nodeId);
+        if (!nodeState) {
+          const interactionState = this.interactionResolver.getNodeState(nodeId);
+          nodeState = {
+            isHovered: interactionState.isHovered,
+            isSelected: interactionState.isSelected,
+            isHighlighted: this.stateManager.isNodeHighlighted(nodeId)
+          };
+          nodeStateCache.set(nodeId, nodeState);
+        }
+        return nodeState.isHighlighted;
       }
     );
   }
@@ -582,6 +605,13 @@ export class Renderer {
     );
   }
 
+
+  /**
+   * Get the state manager for highlight operations
+   */
+  getStateManager(): StateManager {
+    return this.stateManager;
+  }
 
   /**
    * Destroy renderer and clean up resources

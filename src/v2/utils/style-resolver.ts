@@ -22,6 +22,14 @@ export const DEFAULT_NODE_INTERACTION_STYLE: Partial<NodeRenderStyle> = {
   // Selection uses radius: 24 and strokeWidth: 4 (handled separately in interaction config)
 };
 
+// Default highlight style (between hover and selection in precedence)
+export const DEFAULT_NODE_HIGHLIGHT_STYLE: Partial<NodeRenderStyle> = {
+  fill: '#fbbf24', // Amber highlight color
+  stroke: '#f59e0b', // Darker amber border
+  strokeWidth: 2, // Highlighted border
+  opacity: 1.0
+};
+
 export const DEFAULT_LINK_LABEL_STYLE: LinkLabelRenderStyle = {
   enabled: true,
   visibility: 'always',
@@ -118,8 +126,8 @@ export class StyleResolver {
   /**
    * Generate cache key for node styles (Step 4 optimization)
    */
-  private createNodeCacheKey(node: V2NodeWithStyle, isHovered: boolean, isSelected: boolean): string {
-    return `${node.id}_${!!node.style}_${isHovered}_${isSelected}_${this.interactionConfigHash}`;
+  private createNodeCacheKey(node: V2NodeWithStyle, isHovered: boolean, isSelected: boolean, isHighlighted: boolean = false): string {
+    return `${node.id}_${!!node.style}_${isHovered}_${isSelected}_${isHighlighted}_${this.interactionConfigHash}`;
   }
 
   /**
@@ -139,18 +147,19 @@ export class StyleResolver {
     node: V2NodeWithStyle;
     isHovered?: boolean;
     isSelected?: boolean;
+    isHighlighted?: boolean;
   }): NodeRenderStyle {
-    const { node, isHovered = false, isSelected = false } = params;
+    const { node, isHovered = false, isSelected = false, isHighlighted = false } = params;
 
     // Check cache first (Step 4 optimization)
-    const cacheKey = this.createNodeCacheKey(node, isHovered, isSelected);
+    const cacheKey = this.createNodeCacheKey(node, isHovered, isSelected, isHighlighted);
     const cached = this.nodeStyleCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     // Fast path: no interaction states, avoid object spreading
-    if (!isHovered && !isSelected) {
+    if (!isHovered && !isSelected && !isHighlighted) {
       const result = node.style ? { ...DEFAULT_NODE_STYLE, ...node.style } : DEFAULT_NODE_STYLE;
       this.nodeStyleCache.set(cacheKey, result);
       return result;
@@ -162,13 +171,20 @@ export class StyleResolver {
       ...node.style
     };
 
-    // Apply interaction styles (V1 pattern: selection takes precedence over hover)
+    // Apply interaction styles with precedence: Default → Hover → Highlight → Selected
     if (isSelected) {
       const interactionStyle = this.mergeNodeStyleSmart(
         DEFAULT_NODE_INTERACTION_STYLE,
         this.interactionConfig?.selection?.nodeStyle
       );
       result = { ...result, ...interactionStyle };
+    } else if (isHighlighted) {
+      // Apply highlight style (precedence over hover but under selection)
+      const highlightStyle = this.mergeNodeStyleSmart(
+        DEFAULT_NODE_HIGHLIGHT_STYLE,
+        this.interactionConfig?.highlight?.nodeStyle
+      );
+      result = { ...result, ...highlightStyle };
     } else if (isHovered) {
       const interactionStyle = this.mergeNodeStyleSmart(
         DEFAULT_NODE_INTERACTION_STYLE,

@@ -52,6 +52,7 @@ export class DragManager {
   // RAF throttling for smooth drag performance
   private dragRenderPending = false;
   private lastDragRenderTime = 0;
+  private pendingAnimationFrame?: number;
 
   /**
    * Initialize drag behavior
@@ -196,7 +197,8 @@ export class DragManager {
     if (this.dragRenderPending) return;
 
     this.dragRenderPending = true;
-    requestAnimationFrame(() => {
+    this.pendingAnimationFrame = requestAnimationFrame(() => {
+      this.pendingAnimationFrame = undefined;
       this.dragRenderPending = false;
       this.lastDragRenderTime = performance.now();
 
@@ -282,6 +284,12 @@ export class DragManager {
    */
   destroy(): void {
     try {
+      // Cancel any pending animation frame
+      if (this.pendingAnimationFrame !== undefined) {
+        cancelAnimationFrame(this.pendingAnimationFrame);
+        this.pendingAnimationFrame = undefined;
+      }
+
       if (this.config?.canvas) {
         // Remove D3 drag behavior
         d3Select(this.config.canvas).on('.drag', null);

@@ -6,7 +6,7 @@ import { SimulationNodeDatum, SimulationLinkDatum } from 'd3-force';
 import { NodeRenderStyle, LinkRenderStyle } from './render-styles';
 import { StatsMetrics } from './generic.types';
 import { ZoomBehavior } from 'd3-zoom';
-import { HoverInteractionConfig, SelectionInteractionConfig, GraphControlsConfig, LegendConfig } from '../../shared';
+import { HoverInteractionConfig, SelectionInteractionConfig, HighlightInteractionConfig, GraphControlsConfig, LegendConfig } from '../../shared';
 
 export interface V2Node extends SimulationNodeDatum {
   id: string;
@@ -52,6 +52,7 @@ export interface V2Link extends SimulationLinkDatum<V2Node> {
 export interface InteractionConfig {
   readonly hover?: HoverInteractionConfig;
   readonly selection?: SelectionInteractionConfig;
+  readonly highlight?: HighlightInteractionConfig;
 }
 
 export interface V2Config {
@@ -80,6 +81,13 @@ export interface V2Instance {
   zoomIn(factor?: number, center?: [number, number]): void;
   zoomOut(factor?: number, center?: [number, number]): void;
   clearSelection(): void;
+
+  // Node highlighting methods
+  highlightNode(nodeId: string): void;
+  highlightNodes(nodeIds: string[]): void;
+  unhighlightNode(nodeId: string): void;
+  clearHighlights(): void;
+  getHighlightedNodes(): Set<string>;
 
   // Reliable V1-style event handlers
   on(event: 'nodeSelect', handler: (node: V2Node, element: HTMLCanvasElement) => void): () => void;

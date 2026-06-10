@@ -109,6 +109,7 @@ export class NodesRenderer {
     styleResolver: StyleResolver,
     isNodeHovered: (nodeId: string) => boolean,
     isNodeSelected?: (nodeId: string) => boolean,
+    isNodeHighlighted?: (nodeId: string) => boolean,
     performanceMetrics?: StatsMetrics
   ): void {
     try {
@@ -120,6 +121,7 @@ export class NodesRenderer {
         const hoverStart = performance.now();
         const isHovered = isNodeHovered(node.id);
         const isSelected = isNodeSelected ? isNodeSelected(node.id) : false;
+        const isHighlighted = isNodeHighlighted ? isNodeHighlighted(node.id) : false;
         if (performanceMetrics) {
           performanceMetrics.hoverChecks += performance.now() - hoverStart;
         }
@@ -129,7 +131,8 @@ export class NodesRenderer {
         const style = styleResolver.resolveNodeStyle({
           node,
           isHovered,
-          isSelected
+          isSelected,
+          isHighlighted
         });
         if (performanceMetrics) {
           performanceMetrics.styleResolution += performance.now() - styleStart;

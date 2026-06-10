@@ -78,14 +78,17 @@ export class ZIndexManager {
   }
 
   /**
-   * Create highlight checker for nodes (node is highlighted if hovered or selected)
+   * Create highlight checker for nodes (node is highlighted if hovered, selected, or programmatically highlighted)
    */
   static createNodeHighlightChecker(
     hoveredNodeId: string | null,
-    selectedNodeId: string | null
+    selectedNodeId: string | null,
+    highlightedNodeIds?: Set<string>
   ): (node: V2Node) => boolean {
     return (node: V2Node) => {
-      return node.id === hoveredNodeId || node.id === selectedNodeId;
+      return node.id === hoveredNodeId ||
+             node.id === selectedNodeId ||
+             (highlightedNodeIds?.has(node.id) ?? false);
     };
   }
 
@@ -96,7 +99,8 @@ export class ZIndexManager {
     hoveredNodeId: string | null,
     selectedNodeId: string | null,
     hoveredLinkId: string | null,
-    selectedLinkId: string | null
+    selectedLinkId: string | null,
+    highlightedNodeIds?: Set<string>
   ): (link: V2Link) => boolean {
     return (link: V2Link) => {
       const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
@@ -115,6 +119,13 @@ export class ZIndexManager {
       }
       if (selectedNodeId && (sourceId === selectedNodeId || targetId === selectedNodeId)) {
         return true;
+      }
+
+      // 3. Connected to programmatically highlighted node
+      if (highlightedNodeIds) {
+        if (highlightedNodeIds.has(sourceId) || highlightedNodeIds.has(targetId)) {
+          return true;
+        }
       }
 
       return false;

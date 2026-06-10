@@ -33,6 +33,12 @@ export interface SelectionInteractionConfig {
   readonly linkStyle?: Partial<LinkStyle>;
 }
 
+export interface HighlightInteractionConfig {
+  readonly enabled?: boolean;
+  readonly nodeStyle?: Partial<NodeStyle>;
+  readonly linkStyle?: Partial<LinkStyle>;
+}
+
 export interface DragInteractionConfig {
   readonly enabled?: boolean;
 }
@@ -41,6 +47,7 @@ export interface GraphInteractionConfig {
   readonly drag?: DragInteractionConfig;
   readonly hover?: HoverInteractionConfig;
   readonly selection?: SelectionInteractionConfig;
+  readonly highlight?: HighlightInteractionConfig;
 }
 
 // Import controls configuration from shared

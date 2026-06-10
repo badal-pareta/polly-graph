@@ -46,6 +46,9 @@ export class HoverManager {
   private hasValidPointerPosition = false;
   private containerWarningLogged = false;
 
+  // Store bound handlers for proper cleanup
+  private boundHandlers = new Map<string, EventListener>();
+
   /**
    * Initialize hover manager with force-graph pattern
    */
@@ -89,7 +92,8 @@ export class HoverManager {
         return;
       }
 
-      this.container.addEventListener(evType, (ev: Event) => {
+      // Store bound handler for proper cleanup
+      const eventHandler = (ev: Event) => {
         const pointerEvent = ev as PointerEvent;
         // Update the pointer pos (force-graph pattern)
         const container = this.container;
@@ -122,8 +126,11 @@ export class HoverManager {
             this.containerWarningLogged = true;
           }
         }
+      };
 
-      }, { passive: true });
+      // Store and register the bound handler
+      this.boundHandlers.set(evType, eventHandler);
+      this.container.addEventListener(evType, eventHandler, { passive: true });
     });
   }
 
@@ -404,6 +411,16 @@ export class HoverManager {
    */
   destroy(): void {
     try {
+      // Remove all bound event listeners
+      if (this.container) {
+        this.boundHandlers.forEach((handler, eventType) => {
+          this.container!.removeEventListener(eventType, handler);
+        });
+      }
+
+      // Clear bound handlers
+      this.boundHandlers.clear();
+
       this.eventHandlers.clear();
       this.hoverState = {
         currentHovered: null,

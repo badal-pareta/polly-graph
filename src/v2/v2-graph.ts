@@ -867,6 +867,98 @@ export class V2Graph implements V2Instance {
   }
 
   /**
+   * Highlight a node by ID
+   */
+  highlightNode(nodeId: string): void {
+    try {
+      if (!this.config) {
+        throw new ValidationError('Graph not initialized');
+      }
+
+      // Update state manager
+      this.renderer.getStateManager().highlightNode(nodeId);
+
+      // Trigger re-render to show highlights
+      this.renderer.renderWithTransform();
+    } catch (error) {
+      ErrorHandler.logError(error as Error, { nodeId });
+    }
+  }
+
+  /**
+   * Highlight multiple nodes by IDs
+   */
+  highlightNodes(nodeIds: string[]): void {
+    try {
+      if (!this.config) {
+        throw new ValidationError('Graph not initialized');
+      }
+
+      // Update state manager
+      this.renderer.getStateManager().highlightNodes(nodeIds);
+
+      // Trigger re-render to show highlights
+      this.renderer.renderWithTransform();
+    } catch (error) {
+      ErrorHandler.logError(error as Error, { nodeIds });
+    }
+  }
+
+  /**
+   * Remove highlight from a node
+   */
+  unhighlightNode(nodeId: string): void {
+    try {
+      if (!this.config) {
+        throw new ValidationError('Graph not initialized');
+      }
+
+      // Update state manager
+      this.renderer.getStateManager().unhighlightNode(nodeId);
+
+      // Trigger re-render to remove highlights
+      this.renderer.renderWithTransform();
+    } catch (error) {
+      ErrorHandler.logError(error as Error, { nodeId });
+    }
+  }
+
+  /**
+   * Clear all node highlights
+   */
+  clearHighlights(): void {
+    try {
+      if (!this.config) {
+        throw new ValidationError('Graph not initialized');
+      }
+
+      // Update state manager
+      this.renderer.getStateManager().clearHighlights();
+
+      // Trigger re-render to remove all highlights
+      this.renderer.renderWithTransform();
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+    }
+  }
+
+  /**
+   * Get all highlighted node IDs
+   */
+  getHighlightedNodes(): Set<string> {
+    try {
+      if (!this.config) {
+        throw new ValidationError('Graph not initialized');
+      }
+
+      return this.renderer.getStateManager().getHighlightedNodes();
+    } catch (error) {
+      ErrorHandler.logError(error as Error);
+      return new Set();
+    }
+  }
+
+  /**
    * Destroy the graph and clean up resources
    */
   destroy(): void {
